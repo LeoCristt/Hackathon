@@ -3,7 +3,7 @@ networks:
     driver: bridge
 
 volumes:
-  kafka-data:
+  rabbitmq-data:
 
 services:
   # PostgreSQL для User Service
@@ -115,42 +115,27 @@ services:
         operator-db:
           condition: service_healthy
 
-
-  # Kafka (в KRaft-режиме, без Zookeeper)
-  kafka:
-    image: confluentinc/cp-kafka:7.4.0
-    hostname: kafka
-    container_name: kafka
+  rabbitmq:
+    image: rabbitmq:3-management  # С management UI (http://localhost:15672, guest/guest)
+    container_name: rabbitmq
+    hostname: rabbitmq
     ports:
-      - "9092:9092"
-      - "9093:9093"
+      - "5672:5672"  # AMQP для клиентов
+      - "15672:15672"  # Web UI для мониторинга
     environment:
-      KAFKA_PROCESS_ROLES: "broker,controller"
-      KAFKA_NODE_ID: 1
-      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
-      KAFKA_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
-      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
-      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbit loopback_users []"  # Опционально: разреши guest externally
     volumes:
-      - kafka-data:/var/lib/kafka/data
-    command: >
-      bash -c "
-        if [ ! -f /tmp/kraft-combined-logs/meta.properties ]; then
-          export KAFKA_CLUSTER_ID=$$(kafka-storage random-uuid) &&
-          kafka-storage format -t $$KAFKA_CLUSTER_ID -c /etc/kafka/kraft/server.properties --ignore-formatted &&
-          echo \"Formatted with cluster ID: $$KAFKA_CLUSTER_ID\"
-        fi &&
-        exec kafka-server-start /etc/kafka/kraft/server.properties
-      "
+      - rabbitmq-data:/var/lib/rabbitmq
     networks:
       - kong-net
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]  # Проверяет, что брокер жив (встроенная команда)
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   # Redis - Сервис для кэширования и очередей
   redis:
