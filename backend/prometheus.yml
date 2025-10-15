@@ -1,0 +1,9 @@
+global:
+  scrape_interval: 15s  # Как часто опрашивать таргеты
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Scrape для Kong
+  - job_name: 'kong'
+    static_configs:
+      - targets: ['kong:8001']  # Порт для метрик Kong
