@@ -5,16 +5,16 @@
     --color--widgetChatBackgroundColor: rgba(255, 255, 255, 1);
 
     --size--widgetWidth: 336px;
-    --size--minimizedWidgetHeight: 58px;
+    --size--minimizedWidgetHeight: 60px;
     --size--chatHeight: 255px;
     --size--inputHeight: 60px;
 
     --position--rightPadding: 40px;
 
-    --rounds--leftBorderRadius: 35px;
-    --rounds--rightBordrrRadius: 15px;
+    --rounds--leftBorderRadius: 25px;
+    --rounds--rightBordrrRadius: 10px;
 
-    --padding--widgetPadding: 0 15px;
+    --padding--widgetPadding: 0 10px;
 
     --shadow--minimizedShadow: 0px 0px 25px 0px rgba(0, 0, 0, 0.25);
 
@@ -23,8 +23,8 @@
 
 p {
     color: var(--color--widgetTextColor, rgba(150, 150, 150, 1));
-    font-family: Arial Italic;
-    font-size: 14px;
+    font-family: Arial;
+    font-size: 15px;
     font-weight: 300;
     line-height: 16px;
     letter-spacing: 0px;
