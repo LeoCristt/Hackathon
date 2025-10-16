@@ -201,3 +201,23 @@ services:
     networks:
       - kong-net
     restart: always
+
+  # Chat Service - WebSocket сервис для чата
+  chat-service:
+    build: ./chat-service
+    container_name: chat-service
+    ports:
+      - "3001:3001"  # HTTP и WebSocket порт
+    environment:
+      PORT: 3001
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      REDIS_URL: redis://redis:6379
+      REDIS_MAX_MESSAGES: 50  # Количество последних сообщений для кэширования
+    networks:
+      - kong-net
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
