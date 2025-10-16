@@ -23,7 +23,7 @@ func NewServer(cfg *config.Config) *Server {
 
 func (s *Server) Start() error {
 	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", s.port),
+		Addr:    fmt.Sprintf("0.0.0.0:%d", s.port),
 		Handler: s.RegisterRoutes(),
 	}
 	return server.ListenAndServe()
