@@ -53,15 +53,14 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     this.channelWrapper = this.connection.createChannel({
       json: true,
       setup: async (channel: amqp.Channel) => {
-        // Создаём очередь для БД (для сохранения каждого сообщения)
-        await channel.assertQueue(this.DB_QUEUE, { durable: true });
-        console.log(`✅ Очередь для БД "${this.DB_QUEUE}" готова`);
+        // Очереди уже созданы через rabbitmq-definitions.json в docker-compose
+        // Просто проверяем их наличие (assertQueue с passive:true только проверяет, не создает)
+        await channel.checkQueue(this.DB_QUEUE);
+        console.log(`✅ Очередь для БД "${this.DB_QUEUE}" найдена`);
 
-        // Создаём очереди для AI сервиса
-        await channel.assertQueue(this.AI_REQUEST_QUEUE, { durable: true });
-        await channel.assertQueue(this.AI_RESPONSE_QUEUE, { durable: true });
-        console.log(`✅ Очередь для AI запросов "${this.AI_REQUEST_QUEUE}" готова`);
-        console.log(`✅ Очередь для AI ответов "${this.AI_RESPONSE_QUEUE}" готова`);
+        await channel.checkQueue(this.AI_REQUEST_QUEUE);
+        await channel.checkQueue(this.AI_RESPONSE_QUEUE);
+        console.log(`✅ Очереди для AI сервиса найдены`);
 
         // Подписываемся на ответы от AI агента
         await channel.consume(this.AI_RESPONSE_QUEUE, (msg) => {
