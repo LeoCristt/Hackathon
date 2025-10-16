@@ -17,12 +17,6 @@ func NewAuthHandler(userService *service.UserService) *AuthHandler {
 }
 
 func (h *AuthHandler) Register(c *gin.Context) {
-	role, exists := c.Get("role")
-	if !exists {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid role"})
-		return
-	}
-
 	var input models.CreateUser
 	if err := c.BindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
@@ -38,7 +32,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		RoleID:     input.RoleID,
 	}
 
-	user, err := h.userService.Register(res, role.(string))
+	user, err := h.userService.Register(res)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -57,11 +51,21 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	user, token, err := h.userService.Login(req.Email, req.Password)
+	user, token, refresh, err := h.userService.Login(req.Email, req.Password)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
 	}
+
+	c.SetCookie(
+		"refresh_token",
+		refresh,
+		60*60*24*7,
+		"/",
+		"",
+		false,
+		true,
+	)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "login successful",
@@ -69,7 +73,33 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			"id":    user.ID,
 			"email": user.Email,
 		},
-		"token": token,
-		"test":  "test",
+		"token":   token,
+		"refresh": refresh,
+	})
+}
+
+func (h *AuthHandler) Logout(c *gin.Context) {
+	c.SetCookie("refresh_token", "", -1, "/", "", true, true)
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "successfully logout",
+	})
+}
+
+func (h *AuthHandler) Refresh(c *gin.Context) {
+	refreshString, err := c.Cookie("refresh_token")
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "no refresh"})
+		return
+	}
+
+	newAccess, err := h.userService.Refresh(refreshString)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"access_token": newAccess,
 	})
 }

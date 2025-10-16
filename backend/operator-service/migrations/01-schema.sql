@@ -16,17 +16,15 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TABLE IF NOT EXISTS chats (
     id SERIAL PRIMARY KEY,
-    status VARCHAR(20) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    client_id INTEGER NOT NULL UNIQUE REFERENCES users(id),
-    operator_id INTEGER REFERENCES users(id)
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS messages (
     id SERIAL PRIMARY KEY,
-    sender_id INTEGER NOT NULL REFERENCES users(id), 
+    username VARCHAR(30) NOT NULL,
     content TEXT NOT NULL,  
+    message_sequence INTEGER NOT NULL,
     chat_id INTEGER NOT NULL REFERENCES chats(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
@@ -35,8 +33,5 @@ CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_role_id ON users(role_id);
 
 CREATE INDEX IF NOT EXISTS idx_roles_name ON roles(name);
-
-CREATE INDEX IF NOT EXISTS idx_chats_client_id ON chats(client_id);
-CREATE INDEX IF NOT EXISTS idx_chats_operator_id ON chats(operator_id);
 
 CREATE INDEX IF NOT EXISTS idx_messages_chat_id ON messages(chat_id);
