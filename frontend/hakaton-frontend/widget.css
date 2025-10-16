@@ -1,0 +1,98 @@
+:host {
+    --color--accentWidgetColor: rgba(194, 225, 80, 1);
+    --color--widgetBackgroundColor: rgba(235, 255, 161, 1);
+    --color--widgetTextColor: rgba(150, 150, 150, 1);
+    --color--widgetChatBackgroundColor: rgba(255, 255, 255, 1);
+
+    --size--widgetWidth: 336px;
+    --size--minimizedWidgetHeight: 60px;
+    --size--chatHeight: 255px;
+    --size--inputHeight: 60px;
+
+    --position--rightPadding: 40px;
+
+    --rounds--leftBorderRadius: 25px;
+    --rounds--rightBordrrRadius: 10px;
+
+    --padding--widgetPadding: 0 10px;
+
+    --shadow--minimizedShadow: 0px 0px 25px 0px rgba(0, 0, 0, 0.25);
+
+    --animation--transition: 0.5s ease;
+}
+
+p {
+    color: var(--color--widgetTextColor, rgba(150, 150, 150, 1));
+    font-family: Arial;
+    font-size: 15px;
+    font-weight: 300;
+    line-height: 16px;
+    letter-spacing: 0px;
+    text-align: left;
+}
+
+.widget {
+    position: fixed;
+    right: var(--position--rightPadding);
+    bottom: 0;
+    border-radius: var(--rounds--leftBorderRadius) var(--rounds--rightBordrrRadius) 0 0;
+    box-shadow: var(--shadow--minimizedShadow);
+}
+
+.widgetHeader {
+    background: var(--color--widgetBackgroundColor);
+    width: var(--size--widgetWidth);
+    height: var(--size--minimizedWidgetHeight);
+    border-radius: var(--rounds--leftBorderRadius) var(--rounds--rightBordrrRadius) 0 0;
+    display: flex;
+    padding: var(--padding--widgetPadding);
+    justify-content: space-between;
+}
+
+.minimizedIcon {
+    background: var(--color--accentWidgetColor);
+    border-radius: 100%;
+    aspect-ratio: 1/1;
+}
+
+.verticalCenteredContainer {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.widgetChat {
+    background: var(--color--widgetChatBackgroundColor);
+    width: var(--size--widgetWidth);
+    height: var(--size--chatHeight);
+    padding: var(--padding--widgetPadding);
+    overflow-y: auto;
+    transition: height var(--animation--transition);
+}
+
+.widgetInput {
+    width: var(--size--widgetWidth);
+    height: var(--size--inputHeight);
+    background: var(--color--widgetBackgroundColor);
+    display: flex;
+    padding: var(--padding--widgetPadding);
+    transition: height var(--animation--transition);
+}
+
+.widgetGroupChatInput {
+    height: calc(var(--size--chatHeight) + var(--size--inputHeight));
+    transition: height var(--animation--transition);
+    overflow: hidden;
+}
+
+.widgetGroupChatInput.collapsed {
+    height: 0;
+}
+
+.widgetHeader > div:last-child svg {
+    transition: transform var(--animation--transition);
+}
+
+.widgetHeader.collapsed > div:last-child svg {
+    transform: rotate(180deg);
+}
