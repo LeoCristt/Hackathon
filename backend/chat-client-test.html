@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat Service Test Client</title>
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      width: 100%;
+      max-width: 600px;
+      height: 80vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .header h1 {
+      font-size: 24px;
+      margin-bottom: 10px;
+    }
+
+    .status {
+      display: inline-block;
+      padding: 5px 15px;
+      border-radius: 20px;
+      font-size: 12px;
+      background: rgba(255,255,255,0.2);
+    }
+
+    .status.connected {
+      background: #10b981;
+    }
+
+    .status.disconnected {
+      background: #ef4444;
+    }
+
+    .connection-form {
+      padding: 20px;
+      border-bottom: 1px solid #e5e7eb;
+      background: #f9fafb;
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: 600;
+      color: #374151;
+      font-size: 14px;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 10px;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      font-size: 14px;
+      transition: border-color 0.3s;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .messages {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+      background: #f9fafb;
+    }
+
+    .message {
+      margin-bottom: 15px;
+      padding: 12px;
+      border-radius: 12px;
+      background: white;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      animation: slideIn 0.3s ease;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .message-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-size: 12px;
+    }
+
+    .message-username {
+      font-weight: 600;
+      color: #667eea;
+    }
+
+    .message-ai .message-username {
+      color: #10b981;
+    }
+
+    .message-sequence {
+      background: #e5e7eb;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      color: #6b7280;
+    }
+
+    .message-text {
+      color: #374151;
+      line-height: 1.5;
+    }
+
+    .message-time {
+      font-size: 11px;
+      color: #9ca3af;
+      margin-top: 5px;
+    }
+
+    .message-ai {
+      background: linear-gradient(135deg, #d4fc79 0%, #96e6a1 100%);
+    }
+
+    .input-area {
+      padding: 20px;
+      border-top: 1px solid #e5e7eb;
+      background: white;
+    }
+
+    .input-container {
+      display: flex;
+      gap: 10px;
+    }
+
+    .input-container input {
+      flex: 1;
+      padding: 12px;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    .input-container input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .btn-send {
+      padding: 12px 30px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .btn-send:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-send:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .info-box {
+      background: #fef3c7;
+      border-left: 4px solid #f59e0b;
+      padding: 15px;
+      margin: 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .info-box strong {
+      display: block;
+      margin-bottom: 5px;
+      color: #92400e;
+    }
+
+    .info-box code {
+      background: #fff;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🚀 Chat Service Test</h1>
+      <span class="status disconnected" id="status">Отключен</span>
+    </div>
+
+    <div class="info-box">
+      <strong>📊 Проверка логов и данных:</strong>
+      Логи: <code>docker-compose logs -f chat-service</code><br>
+      Redis: <code>docker exec -it redis redis-cli</code><br>
+      RabbitMQ: <code>http://localhost:15672</code>
+    </div>
+
+    <div class="connection-form" id="connectionForm">
+      <div class="form-group">
+        <label>Имя пользователя (опционально)</label>
+        <input type="text" id="username" placeholder="Пустое = Пользователь (аноним)">
+      </div>
+      <div class="form-group">
+        <label>Chat ID</label>
+        <input type="text" id="chatId" value="test-chat-123" placeholder="chat-123">
+      </div>
+      <div class="form-group">
+        <label>AI Model ID (опционально)</label>
+        <input type="text" id="aiId" placeholder="gpt-4">
+      </div>
+      <button class="btn btn-primary" onclick="connect()">Подключиться</button>
+    </div>
+
+    <div class="messages" id="messages"></div>
+
+    <div class="input-area">
+      <div class="input-container">
+        <input type="text" id="messageInput" placeholder="Введите сообщение..." disabled>
+        <button class="btn-send" id="sendBtn" onclick="sendMessage()" disabled>Отправить</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let socket;
+    let currentChatId;
+    let currentAiId;
+
+    function connect() {
+      const username = document.getElementById('username').value.trim() || undefined;
+      currentChatId = document.getElementById('chatId').value.trim() || 'default';
+      currentAiId = document.getElementById('aiId').value.trim() || undefined;
+
+      // Подключаемся к WebSocket
+      socket = io('http://localhost:3001');
+
+      socket.on('connect', () => {
+        console.log('✅ Подключен к серверу');
+        document.getElementById('status').textContent = 'Подключен';
+        document.getElementById('status').className = 'status connected';
+
+        // Присоединяемся к чату
+        const joinData = { chatId: currentChatId };
+        if (username) {
+          joinData.username = username;
+        }
+
+        socket.emit('join', joinData);
+
+        // Активируем ввод
+        document.getElementById('messageInput').disabled = false;
+        document.getElementById('sendBtn').disabled = false;
+        document.getElementById('connectionForm').style.display = 'none';
+      });
+
+      socket.on('disconnect', () => {
+        console.log('❌ Отключен от сервера');
+        document.getElementById('status').textContent = 'Отключен';
+        document.getElementById('status').className = 'status disconnected';
+        document.getElementById('messageInput').disabled = true;
+        document.getElementById('sendBtn').disabled = true;
+      });
+
+      socket.on('message', (data) => {
+        console.log('📨 Получено сообщение:', data);
+        addMessage(data);
+      });
+
+      socket.on('history', (messages) => {
+        console.log('📚 Получена история:', messages.length, 'сообщений');
+        const messagesDiv = document.getElementById('messages');
+        messagesDiv.innerHTML = ''; // Очищаем перед загрузкой истории
+
+        messages.forEach(msg => {
+          addMessage(msg, false); // false = не скроллить после каждого
+        });
+
+        // Скроллим вниз один раз после загрузки всей истории
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+        // Показываем уведомление
+        const historyNotice = document.createElement('div');
+        historyNotice.className = 'message';
+        historyNotice.style.background = '#e0e7ff';
+        historyNotice.style.textAlign = 'center';
+        historyNotice.style.color = '#4338ca';
+        historyNotice.innerHTML = `<strong>📚 Загружено ${messages.length} сообщений из истории</strong>`;
+        messagesDiv.appendChild(historyNotice);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      });
+
+      socket.on('system', (data) => {
+        console.log('🔔 Системное сообщение:', data);
+      });
+    }
+
+    function addMessage(data, autoScroll = true) {
+      const messagesDiv = document.getElementById('messages');
+      const messageDiv = document.createElement('div');
+
+      const isAI = data.username === 'AI Ассистент';
+      messageDiv.className = 'message' + (isAI ? ' message-ai' : '');
+
+      const time = new Date(data.timestamp).toLocaleTimeString('ru-RU');
+
+      messageDiv.innerHTML = `
+        <div class="message-header">
+          <span class="message-username">${data.username}</span>
+          <span class="message-sequence">#${data.sequence || '?'}</span>
+        </div>
+        <div class="message-text">${escapeHtml(data.message)}</div>
+        <div class="message-time">${time}</div>
+      `;
+
+      messagesDiv.appendChild(messageDiv);
+
+      if (autoScroll) {
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      }
+    }
+
+    function sendMessage() {
+      const input = document.getElementById('messageInput');
+      const message = input.value.trim();
+
+      if (message && socket) {
+        const data = { message };
+        if (currentAiId) {
+          data.aiId = currentAiId;
+        }
+
+        console.log('📤 Отправка сообщения:', data);
+        socket.emit('message', data);
+        input.value = '';
+      }
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Enter для отправки
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('messageInput').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          sendMessage();
+        }
+      });
+    });
+  </script>
+</body>
+</html>
