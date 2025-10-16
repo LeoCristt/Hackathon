@@ -130,7 +130,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
   }
 
   @SubscribeMessage('join')
-  handleJoin(
+  async handleJoin(
     @MessageBody() data: { username?: string; chatId?: string },
     @ConnectedSocket() client: Socket,
   ) {
@@ -154,11 +154,22 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
 
     console.log(`👤 ${username} присоединился к чату ${chatId} (${client.id})`);
 
+    // Получаем историю сообщений из Redis
+    const messageHistory = await this.redisService.getMessageHistory(chatId);
+
+    console.log(`📚 Отправка истории сообщений (${messageHistory.length} шт.) для ${username}`);
+
+    // Отправляем историю только этому клиенту
+    if (messageHistory.length > 0) {
+      client.emit('history', messageHistory);
+    }
+
     return {
       status: 'ok',
       message: 'Успешно присоединились к чату',
       chatId,
       username,
+      historyCount: messageHistory.length,
     };
   }
 
@@ -176,7 +187,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
     const timestamp = new Date().toISOString();
     const messageId = `${chatId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-    // Получаем следующий sequence number из Redis (атомарно)
+    // Получаем следующий sequence number из Redis
     const sequence = await this.redisService.getNextSequence(chatId);
 
     const chatMessage: ChatMessage = {

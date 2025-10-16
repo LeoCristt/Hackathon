@@ -2,6 +2,29 @@
 
 WebSocket сервис для чата с интеграцией RabbitMQ, Redis и AI-агента.
 
+## 🚀 Быстрый старт
+
+```bash
+# 1. Запуск сервисов
+docker-compose up -d chat-service redis rabbitmq
+
+# 2. Открыть тестовый клиент
+start C:\Users\Crist\Desktop\Hakaton\backend\chat-client-test.html
+
+# 3. Смотреть логи (в отдельном терминале)
+docker-compose logs -f chat-service
+```
+
+## 📊 Мониторинг
+
+| Что | Команда/URL |
+|-----|-------------|
+| **Логи chat-service** | `docker-compose logs -f chat-service` |
+| **Redis** | `docker exec -it redis redis-cli` |
+| **RabbitMQ UI** | http://localhost:15672 (guest/guest) |
+| **Просмотр сообщений в Redis** | `docker exec -it redis redis-cli` → `LRANGE chat:test-chat-123:messages 0 -1` |
+| **Sequence счетчик** | `docker exec -it redis redis-cli` → `GET chat:test-chat-123:sequence` |
+
 ## Архитектура
 
 ```
@@ -146,19 +169,37 @@ REDIS_URL=redis://redis:6379
 REDIS_MAX_MESSAGES=50
 ```
 
-## Запуск
+## Запуск и тестирование
 
-### С Docker Compose
+### 1. Запуск сервисов
 
 ```bash
-# Запуск
+# Запуск всех сервисов
 docker-compose up -d chat-service redis rabbitmq
 
-# Просмотр логов
-docker-compose logs -f chat-service
+# Проверка статуса
+docker-compose ps
 ```
 
-### Локально для разработки
+### 2. Тестирование через веб-клиент
+
+Откройте файл `chat-client-test.html` в браузере:
+
+```bash
+# Windows
+start C:\Users\Crist\Desktop\Hakaton\backend\chat-client-test.html
+
+# Linux/Mac
+open /path/to/chat-client-test.html
+```
+
+**Что можно протестировать:**
+- ✅ Анонимный чат (без username)
+- ✅ Менеджер с именем (указать username)
+- ✅ Разные AI модели (указать aiId)
+- ✅ Sequence и messageId в каждом сообщении
+
+### 3. Локальная разработка
 
 ```bash
 cd chat-service
