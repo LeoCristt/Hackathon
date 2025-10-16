@@ -2,7 +2,6 @@ import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import Redis from 'ioredis';
 
 interface ChatMessage {
-  messageId: string;
   sequence: number;
   username: string;
   message: string;

@@ -13,7 +13,6 @@ import { RabbitMQService } from './rabbitmq.service';
 import { RedisService } from './redis.service';
 
 interface ChatMessage {
-  messageId: string;
   sequence: number;
   username: string;
   message: string;
@@ -60,13 +59,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
     console.log('Ответ AI:', aiMessage);
     console.log('Полные данные:', JSON.stringify(response, null, 2));
 
-    const messageId = `${chatId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
     // Получаем следующий sequence number из Redis (атомарно)
     const sequence = await this.redisService.getNextSequence(chatId);
 
     const chatMessage: ChatMessage = {
-      messageId,
       sequence,
       username: 'AI Ассистент',
       message: aiMessage,
@@ -75,7 +71,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
     };
 
     console.log('\n📝 Сформированное сообщение AI:');
-    console.log('  Message ID:', messageId);
     console.log('  Sequence:', sequence);
     console.log('  Username:', 'AI Ассистент');
 
@@ -185,13 +180,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
 
     const { username, chatId } = userInfo;
     const timestamp = new Date().toISOString();
-    const messageId = `${chatId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
     // Получаем следующий sequence number из Redis
     const sequence = await this.redisService.getNextSequence(chatId);
 
     const chatMessage: ChatMessage = {
-      messageId,
       sequence,
       username,
       message: data.message,
@@ -199,7 +192,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
       chatId,
     };
 
-    console.log(`💬 [${messageId}] #${sequence} Сообщение от ${username} в чате ${chatId}: ${data.message}`);
+    console.log(`💬 #${sequence} Сообщение от ${username} в чате ${chatId}: ${data.message}`);
 
     // 1. Отправляем сообщение всем участникам чата через WebSocket
     const chatSockets = this.chatRooms.get(chatId);
