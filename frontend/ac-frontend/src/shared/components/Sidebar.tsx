@@ -7,7 +7,7 @@ interface SidebarProps {
 
 function Sidebar({routes}: SidebarProps) {
     const linkClass = ({ isActive }: { isActive: boolean }) =>
-        `hover:bg-background transition-colors duration-300 rounded-xl w-72 py-3 ${
+        `hover:bg-background transition-colors duration-300 rounded-xl py-3 ${
             isActive
                 ? "bg-background"  // класс для активной
                 : ""         // для неактивной
