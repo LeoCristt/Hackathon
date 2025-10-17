@@ -1,0 +1,41 @@
+# AI Models - stored on Hugging Face
+backend/ai-service/quantized_model/
+backend/ai-service/frida_embedding_model/
+backend/ai-service/Сеть/best_model/
+backend/ai-service/Приложение/best_model/
+backend/ai-service/Оборудование/best_model/
+backend/ai-service/Доступ и пароли/best_model/
+backend/ai-service/Безопастность/best_model/
+
+# Environment variables
+.env
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

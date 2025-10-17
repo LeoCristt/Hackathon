@@ -14,6 +14,7 @@ from numpy.typing import NDArray
 import os
 import pika
 import json
+from huggingface_hub import snapshot_download
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -35,10 +36,37 @@ with open(file_path, "r", encoding="utf-8") as f:
 paragraphs = split_into_paragraphs(text)
 logger.info(f"Разбито на {len(paragraphs)} абзацев.")
 
-local_emb_model_path = os.path.join(base_dir, "frida_embedding_model")
+# --- Загрузка моделей из Hugging Face или локально ---
+def download_model_from_hf(repo_id: str, subfolder: str, local_dir: str, hf_token: str = None):
+    """Загружает модель с Hugging Face, если она не существует локально"""
+    if os.path.exists(local_dir) and os.listdir(local_dir):
+        logger.info(f"Модель уже существует локально: {local_dir}")
+        return local_dir
 
-# Загружаем с локального пути (на устройстве)
-emb_model = SentenceTransformer(local_emb_model_path, device=device)
+    logger.info(f"Загрузка {subfolder} из Hugging Face: {repo_id}")
+    try:
+        snapshot_download(
+            repo_id=repo_id,
+            allow_patterns=f"{subfolder}/**",
+            local_dir=os.path.dirname(local_dir),
+            token=hf_token,
+            local_dir_use_symlinks=False
+        )
+        logger.info(f"Модель успешно загружена в {local_dir}")
+        return local_dir
+    except Exception as e:
+        logger.error(f"Ошибка загрузки модели {repo_id}/{subfolder}: {e}")
+        raise
+
+# Получаем параметры из переменных окружения
+HF_TOKEN = os.getenv('HF_TOKEN')
+HF_MODELS_REPO = os.getenv('HF_MODELS_REPO', 'your-username/ai-service-models')
+
+# Загружаем модель эмбеддингов
+local_emb_model_path = os.path.join(base_dir, "frida_embedding_model")
+emb_model_path = download_model_from_hf(HF_MODELS_REPO, "frida_embedding_model", local_emb_model_path, HF_TOKEN)
+emb_model = SentenceTransformer(emb_model_path, device=device)
+
 paragraph_embeddings = emb_model.encode(
     paragraphs,
     prompt_name="search_document",
@@ -46,15 +74,21 @@ paragraph_embeddings = emb_model.encode(
     normalize_embeddings=True
 )
 
-# --- Модель и токенизатор ---
-model = AutoModelForCausalLM.from_pretrained(os.path.join(base_dir, "quantized_model"))
-tokenizer = AutoTokenizer.from_pretrained(os.path.join(base_dir, "Сеть/best_model"))
+# --- Загрузка базовой модели ---
+local_base_model_path = os.path.join(base_dir, "quantized_model")
+base_model_path = download_model_from_hf(HF_MODELS_REPO, "quantized_model", local_base_model_path, HF_TOKEN)
+model = AutoModelForCausalLM.from_pretrained(base_model_path)
+
+# --- Загрузка LoRA адаптера для конкретной категории (Сеть) ---
+local_lora_path = os.path.join(base_dir, "Сеть", "best_model")
+lora_path = download_model_from_hf(HF_MODELS_REPO, "Сеть/best_model", local_lora_path, HF_TOKEN)
+tokenizer = AutoTokenizer.from_pretrained(lora_path)
 
 # --- LLM ---
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
 
-model = PeftModel.from_pretrained(model, os.path.join(base_dir, "Сеть/best_model"))
+model = PeftModel.from_pretrained(model, lora_path)
 
 class ParagraphRetriever(BaseRetriever):
     paragraphs: List[str]
