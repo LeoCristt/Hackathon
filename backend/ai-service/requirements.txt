@@ -1,0 +1,11 @@
+torch>=2.0.0
+numpy
+transformers
+peft
+sentence-transformers
+langchain
+scikit-learn
+razdel
+pika
+bitsandbytes>=0.41.0  # Для CUDA 11.0+; проверь версию torch
+accelerate>=0.21.0    # Рекомендуется для transformers

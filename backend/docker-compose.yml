@@ -25,8 +25,6 @@ services:
     volumes:
       - ./operator-service/migrations:/docker-entrypoint-initdb.d 
 
-
-
   # Миграции для Kong
   kong-db:
     image: postgres:13
@@ -271,6 +269,38 @@ services:
       - kong-net
     restart: always
 
+  # RAG Bot Service (новый сервис для вашего RAG-бота с RabbitMQ)
+  ai-service:
+    build:
+      context: ./ai-service  # Путь к директории с Dockerfile, model.py, requirements.txt и т.д.
+      dockerfile: Dockerfile
+      cache_from:
+        - ai-service:latest  # Кэш от предыдущего образа (для deps) — работает без BuildKit
+      args:
+        BUILDKIT_INLINE_CACHE: 1  # Опционально: для inline cache (если BuildKit включён глобально, но не обязательно)
+    container_name: ai-service
+    image: ai-service:latest
+    depends_on:
+      rabbitmq:
+        condition: service_healthy  # Ждем, пока RabbitMQ запустится и healthy
+    environment:
+      RABBITMQ_HOST: rabbitmq  # Хост RabbitMQ внутри Docker-сети
+      QUEUE_IN: ai_requests    # Очередь входящих (доработай в коде, если нужно читать из env)
+      QUEUE_OUT: ai_response   # Очередь исходящих
+    networks:
+      - kong-net
+    restart: unless-stopped
+    deploy:  # Для GPU (работает в Docker Compose v2.18+ с NVIDIA Container Toolkit)
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    volumes:
+      - ./ai-service:/app  # Hot-reload: монтируем код из ./ai-service на хосте в /app контейнера
+      # Если модели/файлы тяжёлые и не меняются — не монтируй их, чтобы не тормозить I/O
+      
   # Chat Service - WebSocket сервис для чата
   chat-service:
     build: ./chat-service
