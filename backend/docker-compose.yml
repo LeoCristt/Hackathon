@@ -98,21 +98,45 @@ services:
     networks:
       - kong-net
 
+  kong-setup:
+    image: curlimages/curl:latest
+    container_name: kong-setup
+    depends_on:
+      kong:
+        condition: service_started
+      operator-service:  # Добавляем зависимость
+        condition: service_started
+    networks:
+      - kong-net
+    restart: "no"
+    command: >  
+      sh -c "
+        echo 'Waiting for Kong...' &&
+        sleep 30 &&
+        curl -X POST http://kong:8001/services --data name=operator-service --data url=http://operator-service:8080 &&
+        curl -X POST http://kong:8001/services/operator-service/routes --data 'paths[]=/api/auth' --data 'strip_path=false' &&
+        echo 'Kong setup done'
+      "
+
   # User Service
   operator-service:
     build: ./operator-service
     networks:
       - kong-net
     expose:
-      - "8000"
+      - "8080"
     environment:
       REDIS_HOST: redis  # Подключение к Redis
       POSTGRES_HOST: operator-db  # Подключение к своей базе данных
       POSTGRES_USER: operator_service
       POSTGRES_PASSWORD: operator_password
       POSTGRES_DB: operator_db  # Своя база данных для User Service
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/  # URL RabbitMQ
+      RABBITMQ_QUEUE: db_messages  
     depends_on:
         operator-db:
+          condition: service_healthy
+        rabbitmq:
           condition: service_healthy
 
   rabbitmq:

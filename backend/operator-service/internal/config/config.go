@@ -15,6 +15,11 @@ type Config struct {
 	PostgresPass string
 }
 
+type RabbitMQConfig struct {
+	URL   string
+	Queue string
+}
+
 func LoadConfig() *Config {
 	port, err := strconv.Atoi(os.Getenv("PORT"))
 	if err != nil || port <= 0 {
@@ -31,7 +36,7 @@ func LoadConfig() *Config {
 	}
 
 	if host == "" || user == "" || pass == "" || db == "" {
-		log.Fatal("Отсутствуют обязательные переменные окружения: POSTGRES_HOST, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB")
+		log.Fatal("no env: POSTGRES_HOST, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB")
 	}
 
 	return &Config{
@@ -41,5 +46,12 @@ func LoadConfig() *Config {
 		PostgresUser: user,
 		PostgresDB:   db,
 		PostgresPass: pass,
+	}
+}
+
+func LoadRabbitMQConfig() RabbitMQConfig {
+	return RabbitMQConfig{
+		URL:   os.Getenv("RABBITMQ_URL"),
+		Queue: os.Getenv("RABBITMQ_QUEUE"),
 	}
 }
