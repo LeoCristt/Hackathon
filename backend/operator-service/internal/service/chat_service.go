@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"operator-service/internal/models"
 	"operator-service/internal/repository"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -22,6 +23,7 @@ func (s *ChatService) SaveMessage(chatID string, username, messageText string, c
 		return fmt.Errorf("chatID cannot be empty")
 	}
 
+	// Получаем чат, если нет — создаём
 	chat, err := s.repo.GetChatByID(chatID)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -36,28 +38,44 @@ func (s *ChatService) SaveMessage(chatID string, username, messageText string, c
 		}
 	}
 
+	// Получаем последнюю последовательность сообщений
 	lastSeq, err := s.repo.GetLastMessageSequence(chatID)
 	if err != nil {
 		return fmt.Errorf("failed to get last message sequence for chat %s: %w", chatID, err)
 	}
 
-	message := &models.Message{
-		ChatID:          chat.ID,
-		Username:        username,
-		Message:         messageText,
-		MessageSequence: lastSeq + 1,
-		CreatedAt:       createdAt,
+	for {
+		message := &models.Message{
+			ChatID:          chat.ID,
+			Username:        username,
+			Message:         messageText,
+			MessageSequence: lastSeq + 1,
+			CreatedAt:       createdAt,
+		}
+
+		err := s.repo.CreateMessage(message)
+		if err != nil {
+			if isUniqueConstraintError(err) {
+				// Если последовательность уже занята, увеличиваем и пробуем снова
+				lastSeq++
+				continue
+			}
+			return fmt.Errorf("failed to create message for chat %s: %w", chatID, err)
+		}
+		break
 	}
 
-	if err := s.repo.CreateMessage(message); err != nil {
-		return fmt.Errorf("failed to create message for chat %s: %w", chatID, err)
-	}
-
+	// Обновляем timestamp чата
 	if err := s.repo.UpdateChatTimestamp(chat.ID); err != nil {
 		return fmt.Errorf("failed to update chat timestamp for chat %s: %w", chatID, err)
 	}
 
 	return nil
+}
+
+// Проверка ошибки уникального индекса для Postgres
+func isUniqueConstraintError(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "idx_chat_sequence")
 }
 
 func (s *ChatService) GetAllChats(userID uint, role string) ([]models.Chat, error) {

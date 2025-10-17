@@ -17,7 +17,7 @@ func NewChatRepository(db *gorm.DB) *ChatRepository {
 
 func (r *ChatRepository) GetChatByID(chatID string) (*models.Chat, error) {
 	var chat models.Chat
-	err := r.db.Preload("Messages").Where("id = ?", chatID).First(&chat).Error
+	err := r.db.Where("id = ?", chatID).First(&chat).Error
 	if err != nil {
 		return nil, err
 	}
