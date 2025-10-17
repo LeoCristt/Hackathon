@@ -52,6 +52,26 @@ func (r *ChatRepository) GetLastMessageSequence(chatID string) (int, error) {
 
 func (r *ChatRepository) GetAllChatsByOperator(userID uint) ([]models.Chat, error) {
 	var chats []models.Chat
-	err := r.db.Preload("Messages").Where("operator_id = ?", userID).Order("updated_at DESC").Find(&chats).Error
+	err := r.db.Order("updated_at DESC").Find(&chats).Error
 	return chats, err
+}
+
+func (r *ChatRepository) GetChatSummaries() ([]models.GetChatSummary, error) {
+	var summaries []models.GetChatSummary
+
+	subQuery := r.db.Table("messages").
+		Select("DISTINCT ON (chat_id) chat_id, message, created_at").
+		Order("chat_id, message_sequence DESC")
+
+	err := r.db.Table("chats").
+		Select("chats.id as chat_id, sub.message as last_message, chats.updated_at").
+		Joins("LEFT JOIN (?) as sub ON chats.id = sub.chat_id", subQuery).
+		Order("chats.updated_at DESC").
+		Scan(&summaries).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return summaries, nil
 }
