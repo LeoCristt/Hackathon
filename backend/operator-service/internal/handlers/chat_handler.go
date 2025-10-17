@@ -103,7 +103,7 @@ func (h *ChatHandler) GetAllChats(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
-	userID := userIdVal.(uint)
+	userID := uint(userIdVal.(float64))
 
 	chats, err := h.chatService.GetAllChats(userID, role)
 	if err != nil {
@@ -112,4 +112,21 @@ func (h *ChatHandler) GetAllChats(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, gin.H{"chats": chats})
+}
+
+func (h *ChatHandler) GetChatSummaries(c *gin.Context) {
+	roleVal, exists := c.Get("role")
+	if !exists {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
+	role := roleVal.(string)
+
+	summaries, err := h.chatService.GetChatSummaries(role)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, summaries)
 }

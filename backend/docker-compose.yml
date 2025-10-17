@@ -137,6 +137,7 @@ services:
       curl -X POST http://kong:8001/plugins -d name=cors -d 'config.origins=*' -d config.methods=GET -d config.methods=POST -d config.methods=PUT -d config.methods=DELETE -d config.methods=OPTIONS -d config.headers=Accept -d config.headers=Content-Type -d config.headers=Authorization -d config.credentials=true -d config.max_age=3600 &&
       curl -X POST http://kong:8001/services --data name=operator-service --data url=http://operator-service:8080 &&
       curl -X POST http://kong:8001/services/operator-service/routes --data 'paths[]=/api/auth' --data 'strip_path=false' &&
+      curl -X POST http://kong:8001/services/operator-service/routes --data 'paths[]=/api/chats' --data 'strip_path=false' &&
       echo 'Kong setup done!'
       "
 

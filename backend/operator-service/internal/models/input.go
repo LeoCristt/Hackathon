@@ -19,3 +19,9 @@ type CreateRequest struct {
 	UserID *uint `gorm:"type:integer" json:"user_id"`
 	User   User  `gorm:"foreignKey:UserID" json:"user"`
 }
+
+type GetChatSummary struct {
+	ChatID      string    `json:"chatID"`
+	LastMessage string    `json:"lastMessage"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+}
