@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Demo Page</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            background-color: #f5f5f5;
+        }
+        header {
+            background-color: #333;
+            height: 80px;
+            display: flex;
+            align-items: center;
+            padding: 0 40px;
+        }
+        .logo {
+            background-color: #fff;
+            width: 120px;
+            height: 40px;
+            border-radius: 4px;
+        }
+        .nav-item {
+            background-color: #666;
+            width: 80px;
+            height: 20px;
+            margin-left: 30px;
+            border-radius: 4px;
+        }
+        main {
+            padding: 40px 20px;
+        }
+        .section {
+            margin: 40px 0;
+        }
+        .card {
+            width: 300px;
+            height: 200px;
+            margin: 20px;
+            padding: 20px;
+            border-radius: 8px;
+            display: inline-block;
+            vertical-align: top;
+        }
+        .card1 { background-color: #ff6b6b; }
+        .card2 { background-color: #4ecdc4; }
+        .card3 { background-color: #45b7d1; }
+        .card4 { background-color: #96ceb4; }
+        .card5 { background-color: #feca57; }
+        .card6 { background-color: #ff9ff3; }
+        .text-placeholder {
+            background-color: rgba(255,255,255,0.3);
+            height: 20px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .text-short { width: 60%; }
+        .text-long { width: 90%; }
+        .text-medium { width: 75%; }
+        footer {
+            background-color: #222;
+            height: 120px;
+            margin-top: 60px;
+            padding: 30px 40px;
+        }
+        .footer-block {
+            background-color: #444;
+            width: 200px;
+            height: 60px;
+            display: inline-block;
+            margin-right: 40px;
+            border-radius: 4px;
+        }
+    </style>
+    <script src="http://localhost:4000/"></script>
+</head>
+<body>
+    <header>
+        <div class="logo"></div>
+        <div class="nav-item"></div>
+        <div class="nav-item"></div>
+        <div class="nav-item"></div>
+    </header>
+
+    <main>
+        <div class="section">
+            <div class="card card1">
+                <div class="text-placeholder text-long"></div>
+                <div class="text-placeholder text-short"></div>
+                <div class="text-placeholder text-medium"></div>
+            </div>
+            
+            <div class="card card2">
+                <div class="text-placeholder text-short"></div>
+                <div class="text-placeholder text-long"></div>
+                <div class="text-placeholder text-short"></div>
+            </div>
+            
+            <div class="card card3">
+                <div class="text-placeholder text-long"></div>
+                <div class="text-placeholder text-medium"></div>
+                <div class="text-placeholder text-short"></div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="card card4">
+                <div class="text-placeholder text-short"></div>
+                <div class="text-placeholder text-short"></div>
+                <div class="text-placeholder text-long"></div>
+            </div>
+
+            <div class="card card5">
+                <div class="text-placeholder text-medium"></div>
+                <div class="text-placeholder text-long"></div>
+                <div class="text-placeholder text-medium"></div>
+            </div>
+
+            <div class="card card6">
+                <div class="text-placeholder text-long"></div>
+                <div class="text-placeholder text-short"></div>
+                <div class="text-placeholder text-long"></div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-block"></div>
+        <div class="footer-block"></div>
+        <div class="footer-block"></div>
+    </footer>
+</body>
+</html>

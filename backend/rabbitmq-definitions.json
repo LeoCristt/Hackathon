@@ -1,0 +1,29 @@
+{
+  "rabbit_version": "3.12.0",
+  "rabbitmq_version": "3.12.0",
+  "queues": [
+    {
+      "name": "db_messages",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "ai_requests",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "ai_responses",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    }
+  ],
+  "exchanges": [],
+  "bindings": []
+}
