@@ -96,7 +96,7 @@ p {
 }
 
 .widgetHeader.collapsed > div:last-child svg {
-    transform: rotate(180deg);
+    transform: rotate(-180deg);
 }
 
 .chatMessage {
