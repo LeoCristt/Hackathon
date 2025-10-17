@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import re
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline, PreTrainedTokenizerBase
-from langchain.schema import Document
+from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 from sklearn.metrics.pairwise import cosine_similarity
 from typing import List, Dict, Tuple, Any
@@ -37,7 +37,6 @@ logger.info(f"Разбито на {len(paragraphs)} абзацев.")
 
 local_emb_model_path = os.path.join(base_dir, "frida_embedding_model")
 
-# Загружаем с локального пути (на устройстве)
 emb_model = SentenceTransformer(local_emb_model_path, device=device)
 paragraph_embeddings = emb_model.encode(
     paragraphs,
