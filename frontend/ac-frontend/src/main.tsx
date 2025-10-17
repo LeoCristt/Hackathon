@@ -3,6 +3,9 @@ import { createRoot } from 'react-dom/client'
 import {createBrowserRouter, RouterProvider} from "react-router-dom";
 import './index.css'
 import MainLayout from "./shared/MainLayout.tsx";
+import type {NavigationItem} from "./shared/types/navigation.ts";
+
+const consultantRoutes : NavigationItem[] = [{path: "/test", label: "Test Path"}];
 
 const router = createBrowserRouter([
     {
@@ -12,7 +15,7 @@ const router = createBrowserRouter([
     },
     {
         path: "/consultant",
-        element: <MainLayout />,
+        element: <MainLayout routes={consultantRoutes} />,
         children: []
     }
 ]);
