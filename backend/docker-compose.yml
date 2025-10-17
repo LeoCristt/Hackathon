@@ -125,9 +125,10 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
-      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbit loopback_users []"  # Опционально: разреши guest externally
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbit loopback_users [] -rabbitmq_management load_definitions \"/etc/rabbitmq/definitions.json\""
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
+      - ./rabbitmq-definitions.json:/etc/rabbitmq/definitions.json:ro  # Монтируем конфигурацию очередей
     networks:
       - kong-net
     restart: unless-stopped
@@ -220,4 +221,14 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+    restart: unless-stopped
+
+  # Frontend Widget Service - Сервис для раздачи виджета чата
+  frontend-widget:
+    build: ../frontend/hakaton-frontend
+    container_name: frontend-widget
+    ports:
+      - "4000:4000"  # HTTP порт для виджета
+    networks:
+      - kong-net
     restart: unless-stopped

@@ -3,6 +3,8 @@
     --color--widgetBackgroundColor: rgba(235, 255, 161, 1);
     --color--widgetTextColor: rgba(150, 150, 150, 1);
     --color--widgetChatBackgroundColor: rgba(255, 255, 255, 1);
+    --color--widgetChatMessageUserBackgroundColor: rgba(235, 255, 161, 0.25);
+    --color--widgetChatMessageManagerBackgroundColor: rgba(255, 214, 148, 0.25);
 
     --size--widgetWidth: 336px;
     --size--minimizedWidgetHeight: 60px;
@@ -95,4 +97,69 @@ p {
 
 .widgetHeader.collapsed > div:last-child svg {
     transform: rotate(180deg);
+}
+
+.chatMessage {
+    margin: 10px 0px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    max-width: 75%;
+    word-wrap: break-word;
+    animation: messageSlideIn 0.3s ease;
+    display: block;
+    clear: both;
+}
+
+@keyframes messageSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.chatMessage.user {
+    background-color: var(--color--widgetChatMessageUserBackgroundColor);
+    margin-left: auto;
+    margin-right: 0;
+    float: right;
+    text-align: left;
+}
+
+.chatMessage.ai,
+.chatMessage.manager {
+    background-color: var(--color--widgetChatMessageManagerBackgroundColor);
+    margin-left: 0;
+    margin-right: auto;
+    float: left;
+}
+
+.chatMessage .messageUsername {
+    font-size: 11px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: #666;
+}
+
+.chatMessage.ai .messageUsername {
+    color: #10b981;
+}
+
+.chatMessage.manager .messageUsername {
+    color: #f59e0b;
+}
+
+.chatMessage .messageText {
+    font-size: 13px;
+    line-height: 1.4;
+    color: #333;
+}
+
+.chatMessage .messageTime {
+    font-size: 10px;
+    color: #999;
+    margin-top: 4px;
 }
