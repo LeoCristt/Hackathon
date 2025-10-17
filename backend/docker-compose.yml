@@ -131,8 +131,12 @@ services:
       POSTGRES_USER: operator_service
       POSTGRES_PASSWORD: operator_password
       POSTGRES_DB: operator_db  # Своя база данных для User Service
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/  # URL RabbitMQ
+      RABBITMQ_QUEUE: db_messages  
     depends_on:
         operator-db:
+          condition: service_healthy
+        rabbitmq:
           condition: service_healthy
 
   rabbitmq:

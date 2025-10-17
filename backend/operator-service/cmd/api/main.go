@@ -9,10 +9,11 @@ import (
 
 func main() {
 	cfg := config.LoadConfig()
+	rabbitCfg := config.LoadRabbitMQConfig()
 
-	srv := server.NewServer(cfg)
+	srv := server.NewServer(cfg, rabbitCfg)
 
 	if err := srv.Start(); err != nil {
-		log.Fatalf("Server failed to start: %v", err)
+		log.Fatalf("server failed to start: %v", err)
 	}
 }

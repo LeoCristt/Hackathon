@@ -1,6 +1,7 @@
 package server
 
 import (
+	"log"
 	"net/http"
 	"operator-service/internal/handlers"
 	"operator-service/internal/repository"
@@ -25,7 +26,17 @@ func (s *Server) RegisterRoutes() http.Handler {
 	userService := service.NewUserService(userRepo)
 	authHandler := handlers.NewAuthHandler(userService)
 
+	chatRepo := repository.NewChatRepository(s.db.DB())
+	chatService := service.NewChatService(chatRepo)
+	chatHandler := handlers.NewChatHandler(chatService)
+
 	routes.RegisterAuthRoutes(r, authHandler)
+	routes.RegisterChatRoutes(r, chatHandler)
+
+	go func() {
+		log.Printf("listening RabbitMQ queue: %s", s.rabbitCfg.Queue)
+		chatHandler.ConsumeRabbitMQ(s.rabbitCfg.URL, s.rabbitCfg.Queue)
+	}()
 
 	return r
 }
