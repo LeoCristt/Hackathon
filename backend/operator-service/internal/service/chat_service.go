@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"operator-service/internal/models"
 	"operator-service/internal/repository"
+	"time"
+
+	"gorm.io/gorm"
 )
 
 type ChatService struct {
@@ -14,42 +17,47 @@ func NewChatService(repo *repository.ChatRepository) *ChatService {
 	return &ChatService{repo: repo}
 }
 
-func (s *ChatService) SaveMessage(chatID, clientID, operatorID uint, username, content string) error {
-	var chat *models.Chat
-	var err error
+func (s *ChatService) SaveMessage(chatID string, username, messageText string, createdAt time.Time) error {
+	if chatID == "" {
+		return fmt.Errorf("chatID cannot be empty")
+	}
 
-	if chatID != 0 {
-		chat, err = s.repo.GetChatByID(chatID)
-		if err != nil {
-			return err
-		}
-	} else {
-		chat = &models.Chat{
-			ClientID:   clientID,
-			OperatorID: &operatorID,
-		}
-		if err := s.repo.CreateChat(chat); err != nil {
-			return err
+	chat, err := s.repo.GetChatByID(chatID)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			chat = &models.Chat{
+				ID: chatID,
+			}
+			if err := s.repo.CreateChat(chat); err != nil {
+				return fmt.Errorf("failed to create chat with ID %s: %w", chatID, err)
+			}
+		} else {
+			return fmt.Errorf("failed to get chat with ID %s: %w", chatID, err)
 		}
 	}
 
-	lastSeq, err := s.repo.GetLastMessageSequence(chat.ID)
+	lastSeq, err := s.repo.GetLastMessageSequence(chatID)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get last message sequence for chat %s: %w", chatID, err)
 	}
 
 	message := &models.Message{
 		ChatID:          chat.ID,
 		Username:        username,
-		Content:         content,
+		Message:         messageText,
 		MessageSequence: lastSeq + 1,
+		CreatedAt:       createdAt,
 	}
 
 	if err := s.repo.CreateMessage(message); err != nil {
-		return err
+		return fmt.Errorf("failed to create message for chat %s: %w", chatID, err)
 	}
 
-	return s.repo.UpdateChatTimestamp(chat.ID)
+	if err := s.repo.UpdateChatTimestamp(chat.ID); err != nil {
+		return fmt.Errorf("failed to update chat timestamp for chat %s: %w", chatID, err)
+	}
+
+	return nil
 }
 
 func (s *ChatService) GetAllChats(userID uint, role string) ([]models.Chat, error) {

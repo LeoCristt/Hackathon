@@ -10,7 +10,8 @@ import (
 func RegisterAuthRoutes(r *gin.Engine, authHandler *handlers.AuthHandler) {
 	api := r.Group("/api/auth")
 	{
-		api.POST("/register", utils.AuthMiddleware(), authHandler.Register)
+		api.POST("/register", authHandler.Register)
 		api.POST("/login", authHandler.Login)
+		api.GET("/check_token", utils.AuthMiddleware())
 	}
 }

@@ -15,9 +15,9 @@ func NewChatRepository(db *gorm.DB) *ChatRepository {
 	return &ChatRepository{db: db}
 }
 
-func (r *ChatRepository) GetChatByID(chatID uint) (*models.Chat, error) {
+func (r *ChatRepository) GetChatByID(chatID string) (*models.Chat, error) {
 	var chat models.Chat
-	err := r.db.Preload("Messages").First(&chat, chatID).Error
+	err := r.db.Preload("Messages").Where("id = ?", chatID).First(&chat).Error
 	if err != nil {
 		return nil, err
 	}
@@ -32,13 +32,13 @@ func (r *ChatRepository) CreateMessage(msg *models.Message) error {
 	return r.db.Create(msg).Error
 }
 
-func (r *ChatRepository) UpdateChatTimestamp(chatID uint) error {
+func (r *ChatRepository) UpdateChatTimestamp(chatID string) error {
 	return r.db.Model(&models.Chat{}).
 		Where("id = ?", chatID).
 		Update("updated_at", time.Now()).Error
 }
 
-func (r *ChatRepository) GetLastMessageSequence(chatID uint) (int, error) {
+func (r *ChatRepository) GetLastMessageSequence(chatID string) (int, error) {
 	var msg models.Message
 	err := r.db.Where("chat_id = ?", chatID).Order("message_sequence desc").First(&msg).Error
 	if err != nil {

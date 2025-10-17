@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"operator-service/internal/service"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/streadway/amqp"
@@ -56,38 +57,34 @@ func (h *ChatHandler) ConsumeRabbitMQ(connStr, queueName string) error {
 	go func() {
 		for d := range msgs {
 			var payload struct {
-				ChatID          uint `json:"chat_id"`
-				ClientID        uint `json:"client_id"`
-				MessageSequence uint `json:"message_sequence"`
-				Message         struct {
-					Username string `json:"username"`
-					Content  string `json:"content"`
-				} `json:"message"`
+				ChatID          string    `json:"chatId"`
+				MessageSequence int       `json:"sequence"`
+				Username        string    `json:"username"`
+				Message         string    `json:"message"`
+				CreatedAt       time.Time `json:"timestamp"`
 			}
 
 			if err := json.Unmarshal(d.Body, &payload); err != nil {
 				log.Printf("failed to parse message from queue %s: %v", queueName, err)
-				d.Nack(false, true)
 				continue
 			}
 
-			if err := h.chatService.SaveMessage(
+			err := h.chatService.SaveMessage(
 				payload.ChatID,
-				payload.ClientID,
-				payload.MessageSequence,
-				payload.Message.Username,
-				payload.Message.Content,
-			); err != nil {
+				payload.Username,
+				payload.Message,
+				payload.CreatedAt,
+			)
+			if err != nil {
 				log.Printf("failed to save message from queue %s: %v", queueName, err)
-				d.Nack(false, true)
 			} else {
-				log.Printf("message saved successfully from queue %s: chat %d", queueName, payload.ChatID)
-				d.Ack(false)
+				log.Printf("message saved successfully from queue %s: chat %s", queueName, payload.ChatID)
 			}
+
 		}
 	}()
 
-	log.Printf("waiting for messages...")
+	log.Printf("waiting for messages in queue %s...", queueName)
 	<-forever
 
 	return nil
