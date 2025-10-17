@@ -1,6 +1,7 @@
 import type {NavigationItem} from '../types/navigation.ts';
-import {NavLink} from "react-router-dom";
+import {NavLink, useNavigate} from "react-router-dom";
 import {useState} from 'react';
+import { useAuth } from '../../auth/AuthContext';
 
 interface SidebarProps {
     routes: NavigationItem[];
@@ -8,6 +9,9 @@ interface SidebarProps {
 
 function Sidebar({routes}: SidebarProps) {
     const [isHovered, setIsHovered] = useState(false);
+    const { logout, user } = useAuth();
+    const navigate = useNavigate();
+
     const linkClass = ({isActive}: { isActive: boolean }) =>
         `transition-colors duration-300 rounded-xl py-3 ${
             isActive
@@ -16,7 +20,8 @@ function Sidebar({routes}: SidebarProps) {
         }`;
 
     const handleLogout = () => {
-        console.log('Выход из аккаунта');
+        logout();
+        navigate('/login');
     };
 
     return (
@@ -55,7 +60,7 @@ function Sidebar({routes}: SidebarProps) {
                                               fill="rgb(0,0,0)" fillRule="evenodd"/>
                                     </g>
                                 </svg>
-                                <h2 className="text-xl">Admin</h2>
+                                <h2 className="text-xl">{user?.email || 'Admin'}</h2>
                             </div>
                         </div>
 
