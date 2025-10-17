@@ -110,7 +110,7 @@ export default function ChatView() {
                     <input
                         type="text"
                         placeholder="Введите сообщение..."
-                        className="w-full hover:bg-background bg-white/50 border-2 border-white drop-shadow-lg rounded-xl px-4 py-3 focus:outline-none transition-colors duration-300"
+                        className="w-full hover:bg-sidebarBackground bg-sidebarBackground/50 border-2 border-sidebarBackground drop-shadow-lg rounded-xl px-4 py-3 focus:outline-none transition-colors duration-300"
                     />
                 </label>
                 <button className="px-6 py-3 rounded-xl hover:bg-accentColor bg-accentColor/35 border-2 border-accentColor drop-shadow-lg duration-300 font-medium whitespace-nowrap">

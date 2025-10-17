@@ -6,7 +6,7 @@ export default function Consultant() {
         `transition-colors duration-300 rounded-xl p-3 ${
             isActive
                 ? "hover:bg-accentColor bg-accentColor/35 border-2 border-accentColor drop-shadow-lg"
-                : "hover:bg-background bg-sidebarBackground/35 border-2 border-sidebarBackground/50 drop-shadow-lg"
+                : "hover:bg-sidebarBackground bg-sidebarBackground/35 border-2 border-sidebarBackground/50 drop-shadow-lg"
         }`;
 
     return (

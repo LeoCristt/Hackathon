@@ -12,7 +12,7 @@ function Sidebar({routes}: SidebarProps) {
         `transition-colors duration-300 rounded-xl py-3 ${
             isActive
                 ? "hover:bg-accentColor bg-accentColor/50 border-2 border-accentColor drop-shadow-xl"
-                : "hover:bg-background bg-sidebarBackground/35 border-2 border-sidebarBackground/50 drop-shadow-xl"
+                : "hover:bg-sidebarBackground bg-sidebarBackground/35 border-2 border-sidebarBackground/50 drop-shadow-xl"
         }`;
 
     const handleLogout = () => {
@@ -62,7 +62,7 @@ function Sidebar({routes}: SidebarProps) {
                         <button
                             onClick={handleLogout}
                             className={`
-                            absolute top-0 right-0 w-[50%] py-5 bg-red-500 text-white rounded-xl 
+                            absolute top-0 right-0 w-[50%] py-5 bg-red-500/35 border-2 border-red-500 hover:bg-red-500 rounded-xl drop-shadow-lg
                             transition-all duration-300 flex items-end justify-center gap-2 cursor-pointer
                             ${isHovered ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'}
                         `}
