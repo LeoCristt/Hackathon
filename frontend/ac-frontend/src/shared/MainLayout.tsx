@@ -10,7 +10,7 @@ function MainLayout({routes}: SidebarProps) {
     return (
         <div className="w-screen flex flex-row">
             <Sidebar routes={routes}/>
-            <main className="overflow-y-auto">
+            <main className="w-full">
                 <Outlet/>
             </main>
         </div>

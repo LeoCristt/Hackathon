@@ -14,8 +14,8 @@ function Sidebar({routes}: SidebarProps) {
         }`;
 
     return (
-        <div className="h-screen max-h-screen w-72 bg-sidebarBackground flex flex-col justify-between">
-            <h1 className="p-auto py-10 w-full text-center"><span className="text-accentColor">AI</span> Helper</h1>
+        <div className="h-screen max-h-screen min-w-72 bg-sidebarBackground flex flex-col justify-between drop-shadow-xl">
+            <h1 className="text-[3.2rem] p-auto py-10 w-full text-center"><span className="text-accentColor">AI</span> Helper</h1>
             <div className="w-full p-2 flex flex-col gap-4 text-center">
                 {routes.map(route => (
                     <NavLink to={route.path} className={linkClass}>{route.label}</NavLink>
