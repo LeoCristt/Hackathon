@@ -6,11 +6,13 @@ interface SidebarProps {
     routes: NavigationItem[];
 }
 
-function MainLayout({ routes } : SidebarProps) {
+function MainLayout({routes}: SidebarProps) {
     return (
-        <div>
-            <Sidebar routes={routes} />
-            <Outlet />
+        <div className="w-screen flex flex-row">
+            <Sidebar routes={routes}/>
+            <main className="overflow-y-auto">
+                <Outlet/>
+            </main>
         </div>
     )
 }
