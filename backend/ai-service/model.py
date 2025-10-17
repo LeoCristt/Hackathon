@@ -5,12 +5,15 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline, PreTrain
 from langchain.schema import Document
 from langchain_core.retrievers import BaseRetriever
 from sklearn.metrics.pairwise import cosine_similarity
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Any
 import logging
 from peft import PeftModel
 from sentence_transformers import SentenceTransformer
 from razdel import sentenize
 from numpy.typing import NDArray
+import os
+import pika
+import json
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -23,15 +26,19 @@ def split_into_paragraphs(text: str) -> List[str]:
     paragraphs = [p.strip() for p in re.split(r'\n\s*\n|\n', text) if p.strip()]
     return paragraphs
 
-# --- Загружаем базу знаний ---
-with open("knowledge_base.txt", "r", encoding="utf-8") as f:
+base_dir = os.path.dirname(os.path.abspath(__file__))
+file_path = os.path.join(base_dir, "Сеть.txt")
+
+with open(file_path, "r", encoding="utf-8") as f:
     text = f.read()
 
 paragraphs = split_into_paragraphs(text)
 logger.info(f"Разбито на {len(paragraphs)} абзацев.")
 
-# --- Эмбеддинги ---
-emb_model = SentenceTransformer("ai-forever/FRIDA", device=device)
+local_emb_model_path = os.path.join(base_dir, "frida_embedding_model")
+
+# Загружаем с локального пути (на устройстве)
+emb_model = SentenceTransformer(local_emb_model_path, device=device)
 paragraph_embeddings = emb_model.encode(
     paragraphs,
     prompt_name="search_document",
@@ -40,14 +47,14 @@ paragraph_embeddings = emb_model.encode(
 )
 
 # --- Модель и токенизатор ---
-model = AutoModelForCausalLM.from_pretrained("./quantized_model")
-tokenizer = AutoTokenizer.from_pretrained("./lora_finetuned/best_model")
+model = AutoModelForCausalLM.from_pretrained(os.path.join(base_dir, "quantized_model"))
+tokenizer = AutoTokenizer.from_pretrained(os.path.join(base_dir, "Сеть/best_model"))
 
 # --- LLM ---
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
 
-model = PeftModel.from_pretrained(model, "./lora_finetuned/best_model")
+model = PeftModel.from_pretrained(model, os.path.join(base_dir, "Сеть/best_model"))
 
 class ParagraphRetriever(BaseRetriever):
     paragraphs: List[str]
@@ -161,51 +168,53 @@ retriever = ParagraphRetriever(
 )
 
 # --- Функция для рендеринга чата в текст (с контекстом) ---
-def render_chat_with_context(history: List[Dict[str, str]], current_question: str, context: str) -> str:
-    messages = [{"role": "system", "content": base_instruction + ("\nКонтекст: " + context if context else "")}]
+def render_chat_with_context(history: List[Dict[str, Any]], current_question: str, context: str, current_username: str) -> str:
+    messages = [{"role": "Система", "content": base_instruction + ("\nКонтекст: " + context if context else "")}]
     
-    for msg in history:
-        messages.append({"role": "user", "content": msg["question"]})
-        if "answer" in msg:
-            messages.append({"role": "assistant", "content": msg["answer"]})
+    for i, msg in enumerate(history):
+        if i % 2 == 0:
+            # Пользователь
+            username = msg.get("username", "Пользователь")
+            messages.append({"role": username, "content": msg["message"]})
+        else:
+            # AI
+            messages.append({"role": "AI-помощник", "content": msg["answer"]})
     
-    messages.append({"role": "user", "content": current_question})
+    messages.append({"role": current_username, "content": current_question})
     
-    if hasattr(tokenizer, "apply_chat_template"):
-        prompt_text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-    else:
-        prompt_text = "\n".join([f"{msg['role'].capitalize()}: {msg['content']}" for msg in messages]) + "\nAssistant:"
+    prompt_text = "\n".join([f"{msg['role']}: {msg['content']}" for msg in messages]) + "\nAI-помощник:"
     
     return prompt_text
 
 # --- Функция для рендеринга только истории (для подсчёта токенов) ---
-def render_history_only(history: List[Dict[str, str]]) -> str:
-    history_messages = [{"role": "system", "content": base_instruction}]
-    for msg in history:
-        history_messages.append({"role": "user", "content": msg["question"]})
-        if "answer" in msg:
-            history_messages.append({"role": "assistant", "content": msg["answer"]})
+def render_history_only(history: List[Dict[str, Any]]) -> str:
+    history_messages = [{"role": "Система", "content": base_instruction}]
+    for i, msg in enumerate(history):
+        if i % 2 == 0:
+            # Пользователь
+            username = msg.get("username", "Пользователь")
+            history_messages.append({"role": username, "content": msg["message"]})
+        else:
+            # AI
+            history_messages.append({"role": "AI-помощник", "content": msg["answer"]})
     
-    if hasattr(tokenizer, "apply_chat_template"):
-        history_str = tokenizer.apply_chat_template(history_messages, tokenize=False, add_generation_prompt=False)
-    else:
-        history_str = "\n".join([f"{m['role'].capitalize()}: {m['content']}" for m in history_messages])
+    history_str = "\n".join([f"{m['role']}: {m['content']}" for m in history_messages])
     
     return history_str
 
 # --- Функция для обработки запросов ---
-def process_query(query: str, chat_history: List[Dict[str, str]] = None) -> Tuple[str, List[Dict[str, str]]]:
-    if chat_history is None:
-        chat_history = []
+def process_query(query: str, message_history: List[Dict[str, Any]] = None, current_username: str = "Пользователь", chat_id: str = None) -> Tuple[str, List[Dict[str, Any]]]:
+    if message_history is None:
+        message_history = []
     
     try:
         if not query.strip():
-            return "Введите корректный запрос.", chat_history
+            return "Введите корректный запрос.", message_history
 
         question_tokens = len(tokenizer.encode(query))
         
         # Предварительный расчёт истории
-        history_str = render_history_only(chat_history)
+        history_str = render_history_only(message_history)
         history_tokens = len(tokenizer.encode(history_str))
         
         # Устанавливаем лимиты (без обрезки контекста)
@@ -214,12 +223,14 @@ def process_query(query: str, chat_history: List[Dict[str, str]] = None) -> Tupl
         docs = retriever._get_relevant_documents(query)
         if docs[0].page_content == "Не понял вопрос, уточните, пожалуйста!":
             answer = "Не понял вопрос, уточните, пожалуйста!"
-            chat_history.append({"question": query, "answer": answer})
-            return answer, chat_history
+            message_history.append({"username": current_username, "message": query})
+            message_history.append({"answer": answer})
+            return answer, message_history
         elif docs[0].page_content == "Передай запрос специалисту.":
             answer = "Запрос передан специалисту. Пожалуйста, подождите."
-            chat_history.append({"question": query, "answer": answer})
-            return answer, chat_history
+            message_history.append({"username": current_username, "message": query})
+            message_history.append({"answer": answer})
+            return answer, message_history
         
         context = docs[0].page_content
         context_tokens = retriever.last_context_tokens if context else 0
@@ -231,14 +242,15 @@ def process_query(query: str, chat_history: List[Dict[str, str]] = None) -> Tupl
         available_input = max_total_tokens - reserved
         required = retriever.prompt_token_len + history_tokens + question_tokens + context_tokens
 
-        # Если переполнение — обрезаем историю (удаляем старые сообщения)
-        while required > available_input and len(chat_history) > 0:
-            # Удаляем самое старое сообщение
-            removed = chat_history.pop(0)
-            logger.info(f"Обрезано старое сообщение из истории: {removed['question'][:50]}...")
+        # Если переполнение — обрезаем историю (удаляем старые пары: user + ai)
+        while required > available_input and len(message_history) >= 2:
+            # Удаляем самое старое сообщение пользователя и ответ (пара)
+            removed_user = message_history.pop(0)
+            removed_ai = message_history.pop(0)
+            logger.info(f"Обрезано старое сообщение из истории: {removed_user.get('message', '')[:50]}...")
             
             # Пересчитываем историю
-            history_str = render_history_only(chat_history)
+            history_str = render_history_only(message_history)
             history_tokens = len(tokenizer.encode(history_str))
             required = retriever.prompt_token_len + history_tokens + question_tokens + context_tokens
 
@@ -266,7 +278,7 @@ def process_query(query: str, chat_history: List[Dict[str, str]] = None) -> Tupl
             return_full_text=False
         )
 
-        full_prompt = render_chat_with_context(chat_history, query, context)
+        full_prompt = render_chat_with_context(message_history, query, context, current_username)
         
         generated = hf_pipeline(full_prompt)
         answer_text = generated[0]['generated_text'].strip()
@@ -283,25 +295,68 @@ def process_query(query: str, chat_history: List[Dict[str, str]] = None) -> Tupl
             if similarity < 0.5:
                 first_sentence = "Запрос передан специалисту. Пожалуйста, подождите."
 
-        chat_history.append({"question": query, "answer": first_sentence})
+        message_history.append({"username": current_username, "message": query})
+        message_history.append({"answer": first_sentence})
 
-        return first_sentence, chat_history
+        return first_sentence, message_history
 
     except Exception as e:
         logger.error(f"Ошибка: {e}")
-        return "Произошла ошибка при обработке запроса.", chat_history
+        return "Произошла ошибка при обработке запроса.", message_history
 
-# --- Тест ---
+# --- RabbitMQ интеграция ---
+RABBITMQ_HOST = os.getenv('RABBITMQ_HOST')  # Измените на ваш хост
+QUEUE_IN = os.getenv('QUEUE_IN')     # Очередь для входящих запросов
+QUEUE_OUT = os.getenv('QUEUE_OUT')  # Очередь для исходящих ответов
+BOT_USERNAME = "AI-помощник"
+
+def callback(ch, method, properties, body):
+    try:
+        data = json.loads(body)
+        query = data.get('message', '')
+        message_history = data.get('messageHistory', [])
+        chat_id = data.get('chatId', None)
+        # Предполагаем, что текущий username приходит в data, или из последнего user сообщения
+        current_username = "Пользователь"
+        if 'username' in data:
+            current_username = data['username']
+        elif message_history and 'username' in message_history[-1]:
+            current_username = message_history[-1]['username']
+        
+        logger.info(f"Получен запрос из RabbitMQ: {query}")
+        
+        answer, new_history = process_query(query, message_history, current_username, chat_id)
+        print(answer)
+        print(new_history)
+        print(current_username)
+        print(chat_id)
+        
+        response = {
+            'chatId': chat_id,
+            'answer': answer,
+            'botUsername': BOT_USERNAME
+        }
+
+        print(response)
+        
+        # Отправка ответа
+        ch.basic_publish(exchange='', routing_key=QUEUE_OUT, body=json.dumps(response))
+        logger.info(f"Отправлен ответ в {QUEUE_OUT}: {answer}")
+        
+        ch.basic_ack(delivery_tag=method.delivery_tag)
+    except Exception as e:
+        logger.error(f"Ошибка в callback: {e}")
+        ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+
 if __name__ == "__main__":
-    history = []
-    query1 = "Какое блюдо предпочитал съесть Раскольников перед тем, как совершить убийство процентщицы?"
-    answer1, history = process_query(query1, history)
-    print("Ответ 1:", answer1)
-
-    query2 = "Почему Раскольников решил стать гонщиком формулы 1?"
-    answer2, history = process_query(query2, history)
-    print("Ответ 2:", answer2)
-
-    query3 = "Не неси хуйню. Перенаправь на специалиста меня уже!"
-    answer3, history = process_query(query3, history)
-    print("Ответ 3:", answer3)
+    connection = pika.BlockingConnection(pika.ConnectionParameters(host=RABBITMQ_HOST))
+    channel = connection.channel()
+    
+    channel.queue_declare(queue=QUEUE_IN, durable=True)
+    channel.queue_declare(queue=QUEUE_OUT, durable=True)
+    
+    channel.basic_qos(prefetch_count=1)
+    channel.basic_consume(queue=QUEUE_IN, on_message_callback=callback)
+    
+    logger.info("Ожидание сообщений из RabbitMQ. Для выхода нажмите CTRL+C")
+    channel.start_consuming()

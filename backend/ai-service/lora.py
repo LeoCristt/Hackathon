@@ -2,11 +2,14 @@ from datasets import Dataset
 from transformers import AutoTokenizer, AutoModelForCausalLM, Trainer, TrainingArguments, DataCollatorForLanguageModeling
 from peft import LoraConfig, get_peft_model, TaskType
 import torch
+import os
 import math
 
+base_dir = os.path.dirname(os.path.abspath(__file__))
+
 # --- Модель и токенизатор ---
-model = AutoModelForCausalLM.from_pretrained("./quantized_model")
-tokenizer = AutoTokenizer.from_pretrained("./quantized_model")
+model = AutoModelForCausalLM.from_pretrained(os.path.join(base_dir, "quantized_model"))
+tokenizer = AutoTokenizer.from_pretrained(os.path.join(base_dir, "quantized_model"))
 
 # Убедитесь, что у токенизатора есть pad_token
 if tokenizer.pad_token is None:
@@ -21,8 +24,9 @@ lora_config = LoraConfig(
 )
 model = get_peft_model(model, lora_config)
 
-# --- Загрузка и разделение текста на абзацы ---
-with open("knowledge_base.txt", "r", encoding="utf-8") as f:
+file_path = os.path.join(base_dir, "Сеть.txt")
+
+with open(file_path, "r", encoding="utf-8") as f:
     text = f.read()
 
 # Разделяем текст на абзацы (предполагаем, что абзацы разделены двойным переносом строки)
@@ -32,7 +36,7 @@ paragraphs = text.split("\n")  # Или "\n", если абзацы раздел
 paragraphs = [p.strip() for p in paragraphs if p.strip()]
 
 # --- Токенизация абзацев ---
-max_length = 1024  # Максимальная длина токенизированного абзаца
+max_length = 8192  # Максимальная длина токенизированного абзаца
 all_examples = []
 all_attention_masks = []
 
@@ -113,4 +117,4 @@ trainer = Trainer(
 trainer.train()
 
 # --- Сохранение модели ---
-trainer.save_model("./lora_finetuned/best_model")
+trainer.save_model("./Сеть/best_model")

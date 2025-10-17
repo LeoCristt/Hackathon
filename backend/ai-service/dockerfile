@@ -1,24 +1,23 @@
-# Используем официальный Python образ
-FROM python:3.10-slim
+FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04 AS base
 
-# Устанавливаем рабочую директорию
+ENV PYTHONUNBUFFERED=1
+
+# Установи системные deps (кэшируется по умолчанию, пока список не меняется)
+RUN apt-get update && apt-get install -y \
+    python3-pip \
+    python3-dev \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
-# Копируем зависимости
+# --- Шаг 1: Копируем ТОЛЬКО requirements.txt и устанавливаем deps ---
+# Кэшируется, пока файл не меняется
 COPY requirements.txt .
+RUN pip3 install --no-cache-dir -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu121 && \
+    rm -rf /tmp/*  # Очистка
 
-# Устанавливаем зависимости
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Копируем исходники приложения
+# --- Шаг 2: Копируем остальной код ---
 COPY . .
 
-# Указываем порт (если ты используешь FastAPI/Flask)
-EXPOSE 8000
-
-# Команда для запуска приложения
-# Flask:
-# CMD ["python", "main.py"]
-
-# FastAPI (через Uvicorn):
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD python3 model.py  # Исправлено здесь
