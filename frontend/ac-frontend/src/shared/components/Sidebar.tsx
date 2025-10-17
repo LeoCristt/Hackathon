@@ -7,11 +7,12 @@ interface SidebarProps {
 
 function Sidebar({ routes } : SidebarProps) {
     return (
-        <>
+        <div className="h-screen w-72 bg-red-400">
+            <h1><span className="text-accentColor">AI</span> Helper</h1>
             {routes.map(route => (
                 <Link to={route.path}>{route.label}</Link>
             ))}
-        </>
+        </div>
     )
 }
 
