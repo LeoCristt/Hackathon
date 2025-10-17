@@ -30,8 +30,13 @@ func (s *Server) RegisterRoutes() http.Handler {
 	chatService := service.NewChatService(chatRepo)
 	chatHandler := handlers.NewChatHandler(chatService)
 
+	adminRepo := repository.NewAdminRepository(s.db.DB())
+	adminService := service.NewAdminService(adminRepo)
+	adminHandler := handlers.NewAdminHandler(adminService)
+
 	routes.RegisterAuthRoutes(r, authHandler)
 	routes.RegisterChatRoutes(r, chatHandler)
+	routes.RegisterAdminRoutes(r, adminHandler)
 
 	go func() {
 		log.Printf("listening RabbitMQ queue: %s", s.rabbitCfg.Queue)
