@@ -11,7 +11,8 @@ interface AIRequest {
 
 interface AIResponse {
   chatId: string;
-  response: string;
+  answer: string;
+  botUsername: string;
 }
 
 @Injectable()

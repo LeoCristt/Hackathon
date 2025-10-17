@@ -14,7 +14,7 @@ WORKDIR /app
 # --- Шаг 1: Копируем ТОЛЬКО requirements.txt и устанавливаем deps ---
 # Кэшируется, пока файл не меняется
 COPY requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu121 && \
+RUN pip3 install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu121 && \
     rm -rf /tmp/*  # Очистка
 
 # --- Шаг 2: Копируем остальной код ---

@@ -54,7 +54,8 @@ export default function ChatView() {
                 ) : (
                     messages.map((msg, index) => {
                         const isFromUser = msg.username === 'Пользователь';
-                        const isFromAI = msg.username === 'AI Ассистент';
+                        // AI сообщения - любое username, начинающееся с 'AI' или содержащее 'помощник'
+                        const isFromAI = msg.username.startsWith('AI') || msg.username.includes('помощник');
 
                         return (
                             <div

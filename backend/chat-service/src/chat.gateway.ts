@@ -50,13 +50,14 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
     console.log('✅ ChatGateway инициализирован, подписка на AI ответы настроена');
   }
 
-  private async handleAIResponse(response: { chatId: string; response: string }) {
-    const { chatId, response: aiMessage } = response;
+  private async handleAIResponse(response: { chatId: string; answer: string; botUsername: string }) {
+    const { chatId, answer, botUsername } = response;
 
     console.log('\n🎯 ═══ ПОЛУЧЕН ОТВЕТ ОТ AI СЕРВИСА ═══');
     console.log('Очередь: ai_responses');
     console.log('Chat ID:', chatId);
-    console.log('Ответ AI:', aiMessage);
+    console.log('Ответ AI:', answer);
+    console.log('Bot Username:', botUsername);
     console.log('Полные данные:', JSON.stringify(response, null, 2));
 
     // Получаем следующий sequence number из Redis (атомарно)
@@ -64,15 +65,15 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
 
     const chatMessage: ChatMessage = {
       sequence,
-      username: 'AI Ассистент',
-      message: aiMessage,
+      username: botUsername || 'AI Ассистент',
+      message: answer,
       timestamp: new Date().toISOString(),
       chatId,
     };
 
     console.log('\n📝 Сформированное сообщение AI:');
     console.log('  Sequence:', sequence);
-    console.log('  Username:', 'AI Ассистент');
+    console.log('  Username:', botUsername);
 
     // Кэшируем ответ AI в Redis
     await this.redisService.cacheMessage(chatId, chatMessage);

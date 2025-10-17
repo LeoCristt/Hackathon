@@ -142,7 +142,8 @@
         const messageDiv = document.createElement('div');
 
         // Определяем тип сообщения
-        const isAI = data.username === 'AI Ассистент';
+        // AI сообщения - любое username, начинающееся с 'AI' или содержащее 'помощник'
+        const isAI = data.username.startsWith('AI') || data.username.includes('помощник');
         const isManager = data.username && data.username.includes('Менеджер');
         const isUser = data.username === 'Пользователь' || (!isAI && !isManager);
 
