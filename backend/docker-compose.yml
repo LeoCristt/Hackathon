@@ -324,3 +324,13 @@ services:
     networks:
       - kong-net
     restart: unless-stopped
+
+  # AC Frontend - Admin Console для управления чатами
+  ac-frontend:
+    build: ../frontend/ac-frontend
+    container_name: ac-frontend
+    ports:
+      - "5173:5173"  # HTTP порт для админ консоли
+    networks:
+      - kong-net
+    restart: unless-stopped

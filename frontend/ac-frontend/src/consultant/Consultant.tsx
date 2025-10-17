@@ -1,7 +1,9 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { testChats } from "./ChatView.tsx";
+import { useChatList } from "../hooks/useChatList";
 
 export default function Consultant() {
+    const { chats, isLoading } = useChatList();
+
     const linkClass = ({isActive}: { isActive: boolean }) =>
         `transition-colors duration-300 rounded-xl p-3 ${
             isActive
@@ -23,18 +25,37 @@ export default function Consultant() {
                 </div>
 
                 <div className="overflow-y-auto w-full p-2 flex flex-col gap-4 drop-shadow-2xl h-full">
-                    {testChats.map(chat => (
-                        <NavLink
-                            key={chat.id}
-                            to={`/consultant/chat/${chat.id}`}
-                            className={linkClass}
-                        >
-                            <div className="font-semibold truncate">{chat.userName}</div>
-                            <div className="text-sm text-gray-600 truncate">
-                                {chat.lastMessage}
-                            </div>
-                        </NavLink>
-                    ))}
+                    {isLoading ? (
+                        <div className="flex items-center justify-center h-full text-gray-500">
+                            Загрузка чатов...
+                        </div>
+                    ) : chats.length === 0 ? (
+                        <div className="flex items-center justify-center h-full text-gray-500">
+                            Нет активных чатов
+                        </div>
+                    ) : (
+                        chats.map(chat => {
+                            const shortId = chat.chatID.split('-').slice(-1)[0];
+
+                            return (
+                                <NavLink
+                                    key={chat.chatID}
+                                    to={`/chat/${chat.chatID}`}
+                                    className={linkClass}
+                                >
+                                    <div className="font-semibold truncate">Чат #{shortId}</div>
+                                    <div className="text-sm text-gray-600 truncate">
+                                        {new Date(chat.updatedAt).toLocaleString('ru-RU', {
+                                            day: '2-digit',
+                                            month: '2-digit',
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                        })}
+                                    </div>
+                                </NavLink>
+                            );
+                        })
+                    )}
                 </div>
             </div>
 
