@@ -90,32 +90,52 @@ services:
       KONG_ADMIN_ACCESS_LOG: /dev/stdout
       KONG_PROXY_ERROR_LOG: /dev/stderr
       KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_PLUGINS: bundled,widget-domain-check  # Добавляем наш плагин
+      KONG_LUA_PACKAGE_PATH: /usr/local/share/lua/5.1/kong/plugins/?.lua;;
     ports:
       - "8000:8000"  # API Gateway
       - "8001:8001"  # Admin API
     volumes:
       - ./public_key.pem:/etc/kong/public_key.pem  # Монтируем публичный ключ для верификации
+      - ./kong-plugins/widget-domain-check:/usr/local/share/lua/5.1/kong/plugins/widget-domain-check  # Монтируем плагин
     networks:
       - kong-net
 
   kong-setup:
-    image: curlimages/curl:latest
+    image: badouralix/curl-jq:latest
     container_name: kong-setup
     depends_on:
       kong:
         condition: service_started
-      operator-service:  # Добавляем зависимость
+      frontend-widget:
+        condition: service_started
+      chat-service:
         condition: service_started
     networks:
       - kong-net
     restart: "no"
-    command: >  
-      sh -c "
-        echo 'Waiting for Kong...' &&
-        sleep 30 &&
-        curl -X POST http://kong:8001/services --data name=operator-service --data url=http://operator-service:8080 &&
-        curl -X POST http://kong:8001/services/operator-service/routes --data 'paths[]=/api/auth' --data 'strip_path=false' &&
-        echo 'Kong setup done'
+    entrypoint: /bin/sh
+    command: >
+      -c "
+      echo 'Waiting for Kong...' &&
+      sleep 30 &&
+      echo 'Creating frontend-widget service...' &&
+      curl -X POST http://kong:8001/services -d name=frontend-widget -d url=http://frontend-widget:4000 &&
+      echo 'Creating widget route...' &&
+      curl -X POST http://kong:8001/services/frontend-widget/routes -d 'paths[]=/widget' -d strip_path=true &&
+      echo 'Creating chat-service service...' &&
+      curl -X POST http://kong:8001/services -d name=chat-service -d url=http://chat-service:3001 &&
+      echo 'Creating chat route...' &&
+      curl -X POST http://kong:8001/services/chat-service/routes -d 'paths[]=/api/chat' -d strip_path=false &&
+      echo 'Creating Socket.IO route and saving response...' &&
+      curl -s -X POST http://kong:8001/services/chat-service/routes -d 'paths[]=/socket.io' -d strip_path=false > /tmp/socket_route.json &&
+      SOCKET_ROUTE_ID=$$(cat /tmp/socket_route.json | jq -r '.id') &&
+      echo \"Socket.IO route created with ID: $$SOCKET_ROUTE_ID\" &&
+      echo 'Adding request-transformer to Socket.IO route...' &&
+      curl -X POST http://kong:8001/routes/$$SOCKET_ROUTE_ID/plugins -d name=request-transformer -d 'config.add.headers[]=X-Widget-AI-Model:gpt-5' -d 'config.add.headers[]=X-Widget-Domain:localhost' -d 'config.add.headers[]=X-Widget-Authorized:true' &&
+      echo 'Adding CORS plugin...' &&
+      curl -X POST http://kong:8001/plugins -d name=cors -d 'config.origins=*' -d config.methods=GET -d config.methods=POST -d config.methods=PUT -d config.methods=DELETE -d config.methods=OPTIONS -d config.headers=Accept -d config.headers=Content-Type -d config.headers=Authorization -d config.credentials=true -d config.max_age=3600 &&
+      echo 'Kong setup done!'
       "
 
   # User Service
@@ -149,18 +169,37 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
-      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbit loopback_users [] -rabbitmq_management load_definitions \"/etc/rabbitmq/definitions.json\""
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbit loopback_users []"  # Опционально: разреши guest externally
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
-      - ./rabbitmq-definitions.json:/etc/rabbitmq/definitions.json:ro  # Монтируем конфигурацию очередей
     networks:
       - kong-net
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "rabbitmqctl", "status"]  # Проверяет, что брокер жив (встроенная команда)
+      test: ["CMD", "rabbitmqctl", "status"]
       interval: 10s
       timeout: 5s
       retries: 10
+
+  # Создание очередей RabbitMQ
+  rabbitmq-setup:
+    image: rabbitmq:3-management
+    container_name: rabbitmq-setup
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - kong-net
+    restart: "no"
+    entrypoint: /bin/bash
+    command: >
+      -c "
+      sleep 5 &&
+      rabbitmqadmin -H rabbitmq -u guest -p guest declare queue name=db_messages durable=true &&
+      rabbitmqadmin -H rabbitmq -u guest -p guest declare queue name=ai_requests durable=true &&
+      rabbitmqadmin -H rabbitmq -u guest -p guest declare queue name=ai_responses durable=true &&
+      echo '✅ RabbitMQ queues created successfully'
+      "
 
   # Redis - Сервис для кэширования и очередей
   redis:

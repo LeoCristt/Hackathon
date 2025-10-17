@@ -20,9 +20,16 @@
     }
 
     function insertWidget() {
+        // Запросы идут через Kong Gateway (порт 8000)
+        // Kong проверит домен в БД и добавит AI модель в headers
         Promise.all([
-            fetch('http://localhost:4000/html').then(r => r.json()),
-            fetch('http://localhost:4000/css').then(r => r.json())
+            fetch('http://localhost:8000/widget/html').then(r => {
+                if (!r.ok) {
+                    throw new Error('Access denied: Domain not authorized');
+                }
+                return r.json();
+            }),
+            fetch('http://localhost:8000/widget/css').then(r => r.json())
         ]).then(([htmlData, cssData]) => {
             // Создаем Shadow DOM
             const container = document.createElement('div');
@@ -89,8 +96,9 @@
         const script = document.createElement('script');
         script.src = 'https://cdn.socket.io/4.5.4/socket.io.min.js';
         script.onload = () => {
-            // Подключаемся к WebSocket серверу
-            socket = io('http://localhost:3001');
+            // Подключаемся к WebSocket серверу через Kong
+            // Socket.IO автоматически использует путь /socket.io/
+            socket = io('http://localhost:8000');
 
             socket.on('connect', () => {
                 console.log('✅ Подключен к чату');

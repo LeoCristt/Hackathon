@@ -101,6 +101,24 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
 
   handleConnection(client: Socket) {
     console.log(`🔗 Клиент подключен: ${client.id}`);
+    console.log('📋 Headers:', JSON.stringify(client.handshake.headers, null, 2));
+
+    // Читаем AI модель из headers (добавлена Kong plugin request-transformer)
+    const aiModel = client.handshake.headers['x-widget-ai-model'] as string;
+    const domain = client.handshake.headers['x-widget-domain'] as string;
+    const isAuthorized = client.handshake.headers['x-widget-authorized'] as string;
+
+    if (!isAuthorized || isAuthorized !== 'true') {
+      console.error(`❌ Клиент не авторизован: ${client.id}`);
+      client.disconnect();
+      return;
+    }
+
+    console.log(`✅ Авторизован: domain=${domain}, ai_model=${aiModel}`);
+
+    // Сохраняем AI модель в сокете
+    (client as any).aiModel = aiModel || 'gpt-4';
+    (client as any).domain = domain;
   }
 
   handleDisconnect(client: Socket) {
@@ -215,20 +233,25 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
     // 4. Получаем историю сообщений из Redis
     const messageHistory = await this.redisService.getMessageHistory(chatId);
 
-    // 5. Отправляем на AI-сервис: сообщение + история + chatId + aiId
+    // 5. Получаем AI модель из сокета (установлена Kong plugin)
+    const aiModel = (client as any).aiModel || data.aiId || 'gpt-4';
+    const domain = (client as any).domain;
+
+    // 6. Отправляем на AI-сервис: сообщение + история + chatId + aiModel
     const aiRequest = {
       chatId,
       message: data.message,
       messageHistory,
-      aiId: data.aiId,
+      aiId: aiModel, // AI модель из Kong plugin
     };
 
     console.log('\n🤖 ═══ ОТПРАВКА В AI СЕРВИС ═══');
     console.log('Очередь: ai_requests');
     console.log('Chat ID:', chatId);
+    console.log('Domain:', domain);
     console.log('Текущее сообщение:', data.message);
     console.log('История сообщений:', messageHistory.length, 'шт.');
-    console.log('AI Model ID:', data.aiId || 'default');
+    console.log('AI Model (из Kong):', aiModel);
     console.log('Полные данные:', JSON.stringify(aiRequest, null, 2));
     await this.rabbitMQService.sendToAI(aiRequest);
     console.log('✅ Запрос отправлен в AI сервис\n');
