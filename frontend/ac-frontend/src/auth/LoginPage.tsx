@@ -26,8 +26,8 @@ export default function LoginPage() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-600 to-blue-500">
-            <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="min-h-screen flex items-center justify-center bg-background">
+            <div className="bg-sidebarBackground/35 border-2 border-sidebarBackground drop-shadow-lg p-8 rounded-2xl shadow-lg w-full max-w-md">
                 <div className="text-center mb-8">
                     <h1 className="text-3xl font-bold text-gray-800 mb-2">Вход в систему</h1>
                     <p className="text-gray-600">Админ панель управления чатами</p>
@@ -51,7 +51,7 @@ export default function LoginPage() {
                             onChange={(e) => setEmail(e.target.value)}
                             required
                             disabled={isLoading}
-                            className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full px-4 py-3 border-2 border-sidebarBackground bg-sidebarBackground/35 rounded-xl focus:outline-none focus:border-accentColor transition-colors duration-300 disabled:opacity-50 disabled:cursor-not-allowed drop-shadow-lg"
                             placeholder="your@email.com"
                         />
                     </div>
@@ -67,7 +67,7 @@ export default function LoginPage() {
                             onChange={(e) => setPassword(e.target.value)}
                             required
                             disabled={isLoading}
-                            className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full px-4 py-3 border-2 border-sidebarBackground bg-sidebarBackground/35 rounded-xl focus:outline-none focus:border-accentColor transition-colors duration-300 disabled:opacity-50 disabled:cursor-not-allowed drop-shadow-lg"
                             placeholder="••••••••"
                         />
                     </div>
@@ -75,7 +75,7 @@ export default function LoginPage() {
                     <button
                         type="submit"
                         disabled={isLoading}
-                        className="w-full bg-gradient-to-r from-purple-600 to-blue-500 text-white py-3 px-4 rounded-xl font-medium hover:from-purple-700 hover:to-blue-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
+                        className="w-full bg-sidebarBackground/35 hover:bg-accentColor/35 border-2 border-sidebarBackground hover:border-accentColor drop-shadow-lg py-3 px-4 rounded-xl font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {isLoading ? 'Вход...' : 'Войти'}
                     </button>
