@@ -76,3 +76,9 @@ func (r *ChatRepository) GetChatSummaries() ([]models.GetChatSummary, error) {
 
 	return summaries, nil
 }
+
+func (r *ChatRepository) UpdateIsManager(chatID string, value bool) error {
+	return r.db.Model(&models.Chat{}).
+		Where("id = ?", chatID).
+		Update("is_manager", value).Error
+}

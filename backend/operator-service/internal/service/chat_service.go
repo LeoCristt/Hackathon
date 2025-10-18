@@ -36,6 +36,13 @@ func (s *ChatService) SaveMessage(chatID string, username, messageText string, I
 		} else {
 			return fmt.Errorf("failed to get chat with ID %s: %w", chatID, err)
 		}
+	} else {
+		if IsManager && !chat.IsManager {
+			if err := s.repo.UpdateIsManager(chatID, true); err != nil {
+				return fmt.Errorf("failed to update is_manager for chat %s: %w", chatID, err)
+			}
+			chat.IsManager = true
+		}
 	}
 
 	lastSeq, err := s.repo.GetLastMessageSequence(chatID)
