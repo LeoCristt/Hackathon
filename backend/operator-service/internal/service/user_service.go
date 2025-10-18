@@ -52,15 +52,20 @@ func (s *UserService) Login(email, password string) (*models.User, string, strin
 		return nil, "", "", errors.New("invalid password")
 	}
 
+	// Create username in format "Оператор {FirstName}"
+	username := "Оператор " + user.FirstName
+
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"id":   user.ID,
-		"role": user.Role.Name,
-		"exp":  time.Now().Add(time.Minute * 15).Unix(),
+		"id":       user.ID,
+		"role":     user.Role.Name,
+		"username": username,
+		"exp":      time.Now().Add(time.Minute * 15).Unix(),
 	})
 	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"id":   user.ID,
-		"role": user.Role.Name,
-		"exp":  time.Now().Add(time.Hour * 24 * 7).Unix(),
+		"id":       user.ID,
+		"role":     user.Role.Name,
+		"username": username,
+		"exp":      time.Now().Add(time.Hour * 24 * 7).Unix(),
 	})
 
 	accessString, err := accessToken.SignedString([]byte(os.Getenv("JWT_SECRET")))
@@ -99,11 +104,16 @@ func (s *UserService) Refresh(refreshString string) (string, error) {
 	if !ok {
 		return "", errors.New("invalid role in token")
 	}
+	username, ok := claims["username"].(string)
+	if !ok {
+		return "", errors.New("invalid username in token")
+	}
 
 	newAccess := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"id":   uint(userID),
-		"role": role,
-		"exp":  time.Now().Add(15 * time.Minute).Unix(),
+		"id":       uint(userID),
+		"role":     role,
+		"username": username,
+		"exp":      time.Now().Add(15 * time.Minute).Unix(),
 	})
 
 	newAccessString, err := newAccess.SignedString([]byte(os.Getenv("JWT_SECRET")))

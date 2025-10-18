@@ -56,6 +56,8 @@ export default function ChatView() {
                         const isFromUser = msg.username === 'Пользователь';
                         // AI сообщения - любое username, начинающееся с 'AI' или содержащее 'помощник'
                         const isFromAI = msg.username.startsWith('AI') || msg.username.includes('помощник');
+                        // Сообщения оператора - username начинается с 'Оператор'
+                        const isFromOperator = msg.username.startsWith('Оператор');
 
                         return (
                             <div
@@ -65,11 +67,14 @@ export default function ChatView() {
                                         ? 'self-end bg-accentColor/35 border-2 border-accentColor drop-shadow-lg rounded-[12px_12px_0_12px]'
                                         : isFromAI
                                         ? 'self-start bg-blue-500/35 border-2 border-blue-500 drop-shadow-lg rounded-[12px_12px_12px_0]'
+                                        : isFromOperator
+                                        ? 'self-start bg-green-500/35 border-2 border-green-500 drop-shadow-lg rounded-[12px_12px_12px_0]'
                                         : 'self-start bg-accentColorLightOpposite/35 border-2 border-accentColorLightOpposite drop-shadow-lg rounded-[12px_12px_12px_0]'
                                 }  px-4 py-3 text-black max-w-xs sm:max-w-sm md:max-w-md lg:max-w-lg xl:max-w-xl`}
                                 style={{ wordBreak: 'break-word' }}
                             >
-                                {msg.message}
+                                <div className="font-semibold text-sm mb-1">{msg.username}</div>
+                                <div>{msg.message}</div>
                             </div>
                         );
                     })

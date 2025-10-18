@@ -142,6 +142,39 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * Устанавливает флаг требования менеджера для чата
+   */
+  async setManagerRequired(chatId: string, required: boolean): Promise<void> {
+    try {
+      const key = `chat:${chatId}:manager_required`;
+      if (required) {
+        await this.client.set(key, '1');
+        await this.client.expire(key, 86400); // TTL 24 часа
+        console.log(`🔔 Флаг manager_required установлен для чата ${chatId}`);
+      } else {
+        await this.client.del(key);
+        console.log(`🔕 Флаг manager_required снят для чата ${chatId}`);
+      }
+    } catch (error) {
+      console.error('❌ Ошибка установки флага manager_required:', error);
+    }
+  }
+
+  /**
+   * Проверяет, требуется ли менеджер для чата
+   */
+  async isManagerRequired(chatId: string): Promise<boolean> {
+    try {
+      const key = `chat:${chatId}:manager_required`;
+      const value = await this.client.get(key);
+      return value === '1';
+    } catch (error) {
+      console.error('❌ Ошибка проверки флага manager_required:', error);
+      return false;
+    }
+  }
+
   private async disconnect() {
     if (this.client) {
       await this.client.quit();

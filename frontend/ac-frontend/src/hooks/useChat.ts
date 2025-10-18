@@ -31,6 +31,9 @@ export function useChat(chatId: string | null) {
 
         console.log('🔌 Подключение к WebSocket для чата:', chatId);
 
+        // Получаем токен из localStorage
+        const token = localStorage.getItem('access_token');
+
         // Создаем новое подключение
         const newSocket = io('http://localhost:8000', {
             path: '/socket.io',
@@ -40,6 +43,9 @@ export function useChat(chatId: string | null) {
             reconnectionAttempts: 5,
             withCredentials: true,
             forceNew: true,
+            extraHeaders: token ? {
+                'Authorization': `Bearer ${token}`
+            } : undefined,
         });
 
         socketRef.current = newSocket;
@@ -50,10 +56,9 @@ export function useChat(chatId: string | null) {
             console.log('✅ Подключено к WebSocket');
             setIsConnected(true);
 
-            // Отправляем событие join после подключения
+            // Отправляем событие join после подключения (username будет извлечен из токена на сервере)
             newSocket.emit('join', {
                 chatId: chatId,
-                username: 'Менеджер',
             });
         });
 
