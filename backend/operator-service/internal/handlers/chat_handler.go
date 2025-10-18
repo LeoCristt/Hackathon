@@ -61,6 +61,7 @@ func (h *ChatHandler) ConsumeRabbitMQ(connStr, queueName string) error {
 				MessageSequence int       `json:"sequence"`
 				Username        string    `json:"username"`
 				Message         string    `json:"message"`
+				IsManager       bool      `json:"isManager"`
 				CreatedAt       time.Time `json:"timestamp"`
 			}
 
@@ -73,6 +74,7 @@ func (h *ChatHandler) ConsumeRabbitMQ(connStr, queueName string) error {
 				payload.ChatID,
 				payload.Username,
 				payload.Message,
+				payload.IsManager,
 				payload.CreatedAt,
 			)
 			if err != nil {

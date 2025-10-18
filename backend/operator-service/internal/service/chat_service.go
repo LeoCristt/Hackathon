@@ -18,7 +18,7 @@ func NewChatService(repo *repository.ChatRepository) *ChatService {
 	return &ChatService{repo: repo}
 }
 
-func (s *ChatService) SaveMessage(chatID string, username, messageText string, createdAt time.Time) error {
+func (s *ChatService) SaveMessage(chatID string, username, messageText string, IsManager bool, createdAt time.Time) error {
 	if chatID == "" {
 		return fmt.Errorf("chatID cannot be empty")
 	}
@@ -48,6 +48,7 @@ func (s *ChatService) SaveMessage(chatID string, username, messageText string, c
 			Username:        username,
 			Message:         messageText,
 			MessageSequence: lastSeq + 1,
+			IsManager:       true,
 			CreatedAt:       createdAt,
 		}
 
