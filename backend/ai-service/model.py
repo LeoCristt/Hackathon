@@ -14,6 +14,7 @@ from numpy.typing import NDArray
 import os
 import pika
 import json
+from typing import Optional  # Добавляем для аннотации Optional
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -27,6 +28,8 @@ base_dir = os.path.dirname(os.path.abspath(__file__))
 def split_into_paragraphs(text: str) -> List[str]:
     paragraphs = [p.strip() for p in re.split(r'\n\s*\n|\n', text) if p.strip()]
     return paragraphs
+
+model = AutoModelForCausalLM.from_pretrained(os.path.join(base_dir, "quantized_model"))
 
 # --- Словарь для выбора модели, токенизатора и пути к файлу ---
 agent_map = {
@@ -60,7 +63,6 @@ agent_map = {
 base_dir = os.path.dirname(os.path.abspath(__file__))
 
 # --- Загрузка моделей и токенизаторов ---
-model = AutoModelForCausalLM.from_pretrained(os.path.join(base_dir, "quantized_model"))
 for agent in agent_map:
     agent_map[agent]["tokenizer"] = AutoTokenizer.from_pretrained(os.path.join(base_dir, f"{agent}/best_model"))
     agent_map[agent]["model"] = PeftModel.from_pretrained(model, os.path.join(base_dir, f"{agent}/best_model"))
@@ -79,6 +81,7 @@ class ParagraphRetriever(BaseRetriever):
     history_tokens: int = 0
     question_tokens: int = 0
     reserved_output_tokens: int = 150
+    tokenizer: Optional[PreTrainedTokenizerBase] = None
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -132,6 +135,35 @@ class ParagraphRetriever(BaseRetriever):
         return paragraphs, paragraph_embeddings
 
     def _get_relevant_documents(self, query: str) -> List[Document]:
+        greeting_phrases = [
+            "Ты кто?", "Ты бот?",
+            "Привет.", "Здравствуйте.",
+            "Как дела?",
+            "Спасибо.",
+            "Пока.", "До свидания."
+        ]
+        query_emb = emb_model.encode(
+            query,
+            prompt_name="paraphrase",
+            convert_to_numpy=True,
+            normalize_embeddings=True
+        )
+        phrases_emb = emb_model.encode(
+            greeting_phrases,
+            prompt_name="paraphrase",
+            convert_to_numpy=True,
+            normalize_embeddings=True
+        )
+        
+        # НАХОДИМ МАКСИМАЛЬНОЕ СХОЖЕСТВО
+        similarities = cosine_similarity([query_emb], phrases_emb)[0]
+        max_sim_idx = np.argmax(similarities)
+        max_similarity = similarities[max_sim_idx]
+        
+        logger.info(f"Приветствие - max_sim: {max_similarity:.3f}, фраза: '{greeting_phrases[max_sim_idx]}'")
+        
+        if max_similarity >= 0.7:
+            return [Document(greeting_phrases[max_sim_idx])]
         # Обычный поиск
         query_emb = self.embeddings_model.encode(
             query,
@@ -215,28 +247,6 @@ def process_query(query: str, message_history: List[Dict[str, Any]] = None, curr
             message_history.append({"username": current_username, "message": query})
             message_history.append({"answer": answer})
             return answer, message_history
-
-        # Проверка на приветствия
-        greeting_phrases = [
-            "Ты кто?", "Ты бот?",
-            "Привет.", "Здравствуйте.",
-            "Как дела?",
-            "Спасибо.",
-            "Пока.", "До свидания."
-        ]
-        phrases_emb = emb_model.encode(
-            greeting_phrases,
-            prompt_name="paraphrase",
-            convert_to_numpy=True,
-            normalize_embeddings=True
-        )
-        for phrase, phrase_emb in zip(greeting_phrases, phrases_emb):
-            sim = cosine_similarity([query_emb], [phrase_emb])[0][0]
-            if sim >= 0.7:
-                answer = phrase
-                message_history.append({"username": current_username, "message": query})
-                message_history.append({"answer": answer})
-                return answer, message_history
 
         # Выбор агента
         selected_tokenizer, selected_model, file_path = retriever.select_agent(query)
@@ -338,9 +348,9 @@ RABBITMQ_HOST = os.getenv('RABBITMQ_HOST')
 QUEUE_IN = os.getenv('QUEUE_IN')
 QUEUE_OUT = os.getenv('QUEUE_OUT')
 BOT_USERNAME = "AI-помощник"
-IS_MANAGER = False
 
 def callback(ch, method, properties, body):
+    is_manager = False  # Локальная переменная
     try:
         data = json.loads(body)
         query = data.get('message', '')
@@ -357,13 +367,13 @@ def callback(ch, method, properties, body):
         answer, new_history = process_query(query, message_history, current_username, chat_id)
 
         if answer == "Запрос передан специалисту. Пожалуйста, подождите.":
-            IS_MANAGER = True
+            is_manager = True
         
         response = {
             'chatId': chat_id,
             'answer': answer,
             'botUsername': BOT_USERNAME,
-            'isManager': IS_MANAGER
+            'isManager': is_manager
         }
 
         ch.basic_publish(exchange='', routing_key=QUEUE_OUT, body=json.dumps(response))
