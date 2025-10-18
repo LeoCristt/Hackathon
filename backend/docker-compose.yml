@@ -273,7 +273,7 @@ services:
     restart: always
 
   chromadb:
-    image: chromadb/chroma:0.5.0  # Используем стабильную версию
+    image: chromadb/chroma:latest # Используем стабильную версию
     container_name: chromadb
     volumes:
       - chroma-data:/chroma/chroma  # Persistent volume для данных ChromaDB
@@ -286,11 +286,6 @@ services:
     networks:
       - kong-net
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "ps aux | grep '[c]hroma' || exit 1"]  # Проверяем, что процесс ChromaDB работает
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
   # RAG Bot Service (новый сервис для вашего RAG-бота с RabbitMQ)
   ai-service:
@@ -302,7 +297,7 @@ services:
       rabbitmq:
         condition: service_healthy  # Ждем, пока RabbitMQ запустится
       chromadb:
-        condition: service_healthy  # Добавляем зависимость от ChromaDB
+        condition: service_started  # Добавляем зависимость от ChromaDB
     environment:
       RABBITMQ_HOST: rabbitmq  # Хост RabbitMQ внутри сети (используется в коде скрипта)
       QUEUE_IN: ai_requests    # Опционально: можно передать через env, если доработать скрипт
