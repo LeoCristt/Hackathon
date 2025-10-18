@@ -1,0 +1,358 @@
+networks:
+  kong-net:
+    driver: bridge
+
+volumes:
+  rabbitmq-data:
+  chroma-data:  # Новый volume для ChromaDB
+
+services:
+  # PostgreSQL для User Service
+  operator-db:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: operator_service
+      POSTGRES_DB: operator_db
+      POSTGRES_PASSWORD: operator_password
+    networks:
+      - kong-net
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h localhost -p 5432 -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-postgres} || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - ./operator-service/migrations:/docker-entrypoint-initdb.d 
+
+  # Миграции для Kong
+  kong-db:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: kong
+      POSTGRES_DB: kong
+      POSTGRES_PASSWORD: kong
+    networks:
+      - kong-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kong"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  kong-legacy-migrate:
+    image: kong:1.5.0
+    depends_on:
+      kong-db:
+        condition: service_healthy
+    command: >
+      sh -c "until kong migrations bootstrap; do
+        echo 'Waiting for database...';
+        sleep 5;
+      done &&
+      kong migrations migrate-apis || echo 'No legacy APIs to migrate'"
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-db
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kong
+    networks:
+      - kong-net
+    restart: on-failure
+
+  kong-migrations:
+    image: kong:3.6
+    depends_on:
+      kong-legacy-migrate:
+        condition: service_completed_successfully
+    command: sh -c "kong migrations bootstrap && kong migrations up && kong migrations finish"
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-db
+      KONG_PG_PASSWORD: kong
+    networks:
+      - kong-net
+
+  kong:
+    image: kong:3.6
+    depends_on:
+      kong-migrations:
+        condition: service_completed_successfully
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-db
+      KONG_PG_PASSWORD: kong
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_PLUGINS: bundled,widget-domain-check  # Добавляем наш плагин
+      KONG_LUA_PACKAGE_PATH: /usr/local/share/lua/5.1/kong/plugins/?.lua;;
+    ports:
+      - "8000:8000"  # API Gateway
+      - "8001:8001"  # Admin API
+    volumes:
+      - ./public_key.pem:/etc/kong/public_key.pem  # Монтируем публичный ключ для верификации
+      - ./kong-plugins/widget-domain-check:/usr/local/share/lua/5.1/kong/plugins/widget-domain-check  # Монтируем плагин
+    networks:
+      - kong-net
+
+  kong-setup:
+    image: badouralix/curl-jq:latest
+    container_name: kong-setup
+    depends_on:
+      kong:
+        condition: service_started
+      frontend-widget:
+        condition: service_started
+      chat-service:
+        condition: service_started
+    networks:
+      - kong-net
+    restart: "no"
+    entrypoint: /bin/sh
+    command: >
+      -c "
+      echo 'Waiting for Kong...' &&
+      sleep 30 &&
+      echo 'Creating frontend-widget service...' &&
+      curl -X POST http://kong:8001/services -d name=frontend-widget -d url=http://frontend-widget:4000 &&
+      echo 'Creating widget route...' &&
+      curl -X POST http://kong:8001/services/frontend-widget/routes -d 'paths[]=/widget' -d strip_path=true &&
+      echo 'Creating chat-service service...' &&
+      curl -X POST http://kong:8001/services -d name=chat-service -d url=http://chat-service:3001 &&
+      echo 'Creating chat route...' &&
+      curl -X POST http://kong:8001/services/chat-service/routes -d 'paths[]=/api/chat' -d strip_path=false &&
+      echo 'Creating Socket.IO route and saving response...' &&
+      curl -s -X POST http://kong:8001/services/chat-service/routes -d 'paths[]=/socket.io' -d strip_path=false > /tmp/socket_route.json &&
+      SOCKET_ROUTE_ID=$$(cat /tmp/socket_route.json | jq -r '.id') &&
+      echo \"Socket.IO route created with ID: $$SOCKET_ROUTE_ID\" &&
+      echo 'Adding request-transformer to Socket.IO route...' &&
+      curl -X POST http://kong:8001/routes/$$SOCKET_ROUTE_ID/plugins -d name=request-transformer -d 'config.add.headers[]=X-Widget-AI-Model:gpt-5' -d 'config.add.headers[]=X-Widget-Domain:localhost' -d 'config.add.headers[]=X-Widget-Authorized:true' &&
+      echo 'Adding CORS plugin...' &&
+      curl -X POST http://kong:8001/plugins -d name=cors -d 'config.origins=*' -d config.methods=GET -d config.methods=POST -d config.methods=PUT -d config.methods=DELETE -d config.methods=OPTIONS -d config.headers=Accept -d config.headers=Content-Type -d config.headers=Authorization -d config.credentials=true -d config.max_age=3600 &&
+      curl -X POST http://kong:8001/services --data name=operator-service --data url=http://operator-service:8080 &&
+      curl -X POST http://kong:8001/services/operator-service/routes --data 'paths[]=/api/auth' --data 'strip_path=false' &&
+      curl -X POST http://kong:8001/services/operator-service/routes --data 'paths[]=/api/chats' --data 'strip_path=false' &&
+      curl -X POST http://kong:8001/services/operator-service/routes --data 'paths[]=/api/user' --data 'strip_path=false' &&
+      curl -X POST http://kong:8001/services/operator-service/routes --data 'paths[]=/api/admin' --data 'strip_path=false' &&
+      echo 'Kong setup done!'
+      "
+
+  # User Service
+  operator-service:
+    build: ./operator-service
+    networks:
+      - kong-net
+    expose:
+      - "8080"
+    environment:
+      REDIS_HOST: redis  # Подключение к Redis
+      POSTGRES_HOST: operator-db  # Подключение к своей базе данных
+      POSTGRES_USER: operator_service
+      POSTGRES_PASSWORD: operator_password
+      POSTGRES_DB: operator_db  # Своя база данных для User Service
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/  # URL RabbitMQ
+      RABBITMQ_QUEUE: db_messages  
+    depends_on:
+        operator-db:
+          condition: service_healthy
+        rabbitmq:
+          condition: service_healthy
+        rabbitmq-setup:
+          condition: service_completed_successfully
+
+  rabbitmq:
+    image: rabbitmq:3-management  # С management UI (http://localhost:15672, guest/guest)
+    container_name: rabbitmq
+    hostname: rabbitmq
+    ports:
+      - "5672:5672"  # AMQP для клиентов
+      - "15672:15672"  # Web UI для мониторинга
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbit loopback_users []"  # Опционально: разреши guest externally
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - kong-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Создание очередей RabbitMQ
+  rabbitmq-setup:
+    image: rabbitmq:3-management
+    container_name: rabbitmq-setup
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - kong-net
+    restart: "no"
+    entrypoint: /bin/bash
+    command: >
+      -c "
+      sleep 5 &&
+      rabbitmqadmin -H rabbitmq -u guest -p guest declare queue name=db_messages durable=true &&
+      rabbitmqadmin -H rabbitmq -u guest -p guest declare queue name=ai_requests durable=true &&
+      rabbitmqadmin -H rabbitmq -u guest -p guest declare queue name=ai_response durable=true &&
+      echo '✅ RabbitMQ queues created successfully'
+      "
+
+  # Redis - Сервис для кэширования и очередей
+  redis:
+    image: redis:6.2
+    container_name: redis
+    ports:
+      - "6379:6379"
+    networks:
+      - kong-net
+    restart: always
+
+  # Prometheus - Сервис для сбора метрик
+  prometheus:
+    image: prom/prometheus:v2.42.0
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"  # Prometheus UI
+    networks:
+      - kong-net
+    restart: always
+
+  # Grafana - Сервис для визуализации метрик
+  grafana:
+    image: grafana/grafana:8.5.0
+    container_name: grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: "admin"  # Пароль администратора
+    volumes:
+      - ./grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml
+    ports:
+      - "3000:3000"  # Grafana UI
+    networks:
+      - kong-net
+    restart: always
+    depends_on:
+      - prometheus
+      - loki
+
+  # Loki - Сервис для сбора и хранения логов
+  loki:
+    image: grafana/loki:2.5.0
+    container_name: loki
+    ports:
+      - "3100:3100"  # Loki UI
+    volumes:
+      - ./loki-config.yml:/etc/loki/loki-config.yml
+    networks:
+      - kong-net
+    restart: always
+
+  # Promtail - Агент для отправки логов в Loki
+  promtail:
+    image: grafana/promtail:2.5.0
+    container_name: promtail
+    ports:
+      - "9080:9080"
+    volumes:
+      - ./promtail-config.yml:/etc/promtail/promtail-config.yml
+      - /var/log:/var/log                      # Чтение логов с хоста
+      - /var/run/docker.sock:/var/run/docker.sock  # Для docker_sd_configs
+    networks:
+      - kong-net
+    restart: always
+
+  chromadb:
+    image: chromadb/chroma:0.5.3
+    container_name: chromadb
+    volumes:
+      - chroma-data:/chroma/chroma  # Persistent volume для данных ChromaDB
+    environment:
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/chroma
+      - ANONYMOUS_TELEMETRY=FALSE
+    ports:
+      - "8002:8000"  # Изменён порт, чтобы не конфликтовать с Kong (8000)
+    networks:
+      - kong-net
+    restart: unless-stopped
+
+  # RAG Bot Service (новый сервис для вашего RAG-бота с RabbitMQ)
+  ai-service:
+    build: 
+      context: ./ai-service  # Укажите путь к директории с Dockerfile и кодом (создайте пап Kу rag-bot и положите туда скрипт, Dockerfile, requirements.txt, модели и т.д.)
+      dockerfile: Dockerfile
+    container_name: ai-service
+    depends_on:
+      rabbitmq:
+        condition: service_healthy  # Ждем, пока RabbitMQ запустится
+      chromadb:
+        condition: service_started  # Добавляем зависимость от ChromaDB
+    environment:
+      RABBITMQ_HOST: rabbitmq  # Хост RabbitMQ внутри сети (используется в коде скрипта)
+      QUEUE_IN: ai_requests    # Опционально: можно передать через env, если доработать скрипт
+      QUEUE_OUT: ai_response
+      CHROMADB_HOST: chromadb  # Добавляем хост ChromaDB
+      CHROMADB_PORT: 8000      # Внутренний порт ChromaDB
+    networks:
+      - kong-net
+    restart: unless-stopped
+    deploy:  # Опцион3 для GPU (если используете Docker Swarm или Compose v3+ с GPU)
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    # volumes:  # Если нужно монтировать дополнительные файлы (например, knowledge_base.txt вне build)
+    #   - ./rag-bot/knowledge_base.txt:/app/knowledge_base.txt
+      
+  # Chat Service - WebSocket сервис для чата
+  chat-service:
+    build: ./chat-service
+    container_name: chat-service
+    ports:
+      - "3001:3001"  # HTTP и WebSocket порт
+    environment:
+      PORT: 3001
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      REDIS_URL: redis://redis:6379
+      REDIS_MAX_MESSAGES: 50  # Количество последних сообщений для кэширования
+    networks:
+      - kong-net
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  # Frontend Widget Service - Сервис для раздачи виджета чата
+  frontend-widget:
+    build: ../frontend/hakaton-frontend
+    container_name: frontend-widget
+    ports:
+      - "4000:4000"  # HTTP порт для виджета
+    networks:
+      - kong-net
+    restart: unless-stopped
+
+  # AC Frontend - Admin Console для управления чатами
+  ac-frontend:
+    build: ../frontend/ac-frontend
+    container_name: ac-frontend
+    ports:
+      - "5173:5173"  # HTTP порт для админ консоли
+    networks:
+      - kong-net
+    restart: unless-stopped

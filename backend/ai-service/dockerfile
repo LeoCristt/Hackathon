@@ -1,0 +1,7 @@
+FROM valyanskiy/my-ml-base:latest
+
+WORKDIR /app
+
+COPY . .
+
+CMD python3 model.py

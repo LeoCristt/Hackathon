@@ -1,0 +1,94 @@
+import type {NavigationItem} from '../types/navigation.ts';
+import {NavLink, useNavigate} from "react-router-dom";
+import {useState} from 'react';
+import { useAuth } from '../../auth/AuthContext';
+
+interface SidebarProps {
+    routes: NavigationItem[];
+}
+
+function Sidebar({routes}: SidebarProps) {
+    const [isHovered, setIsHovered] = useState(false);
+    const { logout, user } = useAuth();
+    const navigate = useNavigate();
+
+    const linkClass = ({isActive}: { isActive: boolean }) =>
+        `transition-colors duration-300 rounded-xl py-3 ${
+            isActive
+                ? "hover:bg-accentColor bg-accentColor/50 border-2 border-accentColor drop-shadow-xl"
+                : "hover:bg-sidebarBackground bg-sidebarBackground/35 border-2 border-sidebarBackground/50 drop-shadow-xl"
+        }`;
+
+    const handleLogout = () => {
+        logout();
+        navigate('/login');
+    };
+
+    return (
+        <div
+            className="h-screen max-h-screen min-w-72 p-2">
+            <div
+                className="bg-sidebarBackground/35 h-full w-full rounded-4xl flex flex-col justify-between border-2 border-sidebarBackground drop-shadow-lg">
+                <h1 className="text-[3.2rem] p-auto py-10 w-full text-center">
+                    <span className="text-accentColor">AI</span> Helper
+                </h1>
+                <div className="w-full p-2 flex flex-col gap-4 text-center drop-shadow-xl">
+                    {routes.map((route, index) => (
+                        <NavLink key={index} to={route.path} className={linkClass}>
+                            {route.label}
+                        </NavLink>
+                    ))}
+                </div>
+                <div className="p-2 pb-4 relative overflow-hidden">
+                    <div
+                        className="relative h-20"
+                        onMouseEnter={() => setIsHovered(true)}
+                        onMouseLeave={() => setIsHovered(false)}
+                    >
+                        <div className={`
+                        absolute top-0 left-0 w-full py-5 flex justify-center transition-all duration-300 rounded-xl
+                        ${isHovered ? '-translate-x-[27.5%] opacity-x' : 'translate-x-0 opacity-100'}`}>
+                            <div className="flex flex-row gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg"
+                                     viewBox="0 0 30 30" width="30.000000" height="30.000000" fill="none">
+                                    <g id="profile">
+                                        <path id="Форма 4"
+                                              d="M20.3998 10.8546C20.3998 12.3608 19.8673 13.6465 18.8022 14.7115C17.7371 15.7766 16.4515 16.3091 14.9453 16.3091C13.439 16.3091 12.1534 15.7766 11.0883 14.7115C10.0233 13.6465 9.49072 12.3608 9.49072 10.8546C9.49072 9.34834 10.0233 8.06269 11.0883 6.99762C12.1534 5.93256 13.439 5.40002 14.9453 5.40002C16.4515 5.40002 17.7371 5.93256 18.8022 6.99762C19.8673 8.06269 20.3998 9.34834 20.3998 10.8546ZM17.6725 10.8546C17.6725 11.6077 17.4063 12.2505 16.8737 12.783C16.3412 13.3156 15.6984 13.5818 14.9453 13.5818C14.1922 13.5818 13.5493 13.3156 13.0168 12.783C12.4843 12.2505 12.218 11.6077 12.218 10.8546C12.218 10.1015 12.4843 9.45863 13.0168 8.9261C13.5493 8.39356 14.1922 8.1273 14.9453 8.1273C15.6984 8.1273 16.3412 8.39356 16.8737 8.9261C17.4063 9.45863 17.6725 10.1015 17.6725 10.8546Z"
+                                              fill="rgb(0,0,0)" fillRule="evenodd"/>
+                                        <path id="Форма 5"
+                                              d="M15 0C6.71591 0 0 6.71591 0 15C0 23.2841 6.71591 30 15 30C23.2841 30 30 23.2841 30 15C30 6.71591 23.2841 0 15 0ZM2.72727 15C2.72727 17.85 3.69955 20.4736 5.32909 22.5573C7.78419 19.3347 11.0374 17.7247 15.0886 17.7273C19.0809 17.7226 22.3046 19.2944 24.7595 22.4427C25.3503 21.6679 25.8418 20.8346 26.2341 19.9427C26.6264 19.0508 26.9084 18.1253 27.0803 17.1663C27.2522 16.2072 27.309 15.2414 27.2508 14.2688C27.1927 13.2962 27.0211 12.344 26.7361 11.4123C26.4512 10.4805 26.0608 9.59526 25.565 8.7565C25.0692 7.91774 24.4818 7.14892 23.8029 6.45005C23.124 5.75118 22.3725 5.1418 21.5485 4.62191C20.7245 4.10202 19.8509 3.68616 18.9278 3.37433C18.0047 3.0625 17.0579 2.86342 16.0874 2.77709C15.1169 2.69076 14.1498 2.7196 13.1862 2.8636C12.2225 3.0076 11.2893 3.26274 10.3864 3.62902C9.48353 3.99529 8.63629 4.46246 7.84468 5.03053C7.05308 5.59859 6.33924 6.25167 5.70318 6.98975C5.06712 7.72783 4.52662 8.53027 4.08168 9.39709C3.63673 10.2639 3.29979 11.1708 3.07086 12.1179C2.84192 13.065 2.7274 14.0257 2.72727 15ZM15 27.2727C12.0957 27.2774 9.51756 26.3629 7.26545 24.5291C9.16431 21.8099 11.772 20.4517 15.0886 20.4545C18.3573 20.4517 20.9432 21.779 22.8464 24.4364C20.5744 26.3319 17.9589 27.2774 15 27.2727Z"
+                                              fill="rgb(0,0,0)" fillRule="evenodd"/>
+                                    </g>
+                                </svg>
+                                <h2 className="text-xl">{user?.email || 'Admin'}</h2>
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={handleLogout}
+                            className={`
+                            absolute top-0 right-0 w-[50%] py-5 bg-red-500/35 border-2 border-red-500 hover:bg-red-500 rounded-xl drop-shadow-lg
+                            transition-all duration-300 flex items-end justify-center gap-2 cursor-pointer
+                            ${isHovered ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'}
+                        `}
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg"
+                                 width="20" height="20"
+                                 viewBox="0 0 24 24"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 strokeWidth="2">
+                                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                                <polyline points="16,17 21,12 16,7"></polyline>
+                                <line x1="21" y1="12" x2="9" y2="12"></line>
+                            </svg>
+                            Выйти
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+export default Sidebar;
