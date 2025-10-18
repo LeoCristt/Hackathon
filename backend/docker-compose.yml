@@ -200,7 +200,7 @@ services:
       sleep 5 &&
       rabbitmqadmin -H rabbitmq -u guest -p guest declare queue name=db_messages durable=true &&
       rabbitmqadmin -H rabbitmq -u guest -p guest declare queue name=ai_requests durable=true &&
-      rabbitmqadmin -H rabbitmq -u guest -p guest declare queue name=ai_responses durable=true &&
+      rabbitmqadmin -H rabbitmq -u guest -p guest declare queue name=ai_response durable=true &&
       echo '✅ RabbitMQ queues created successfully'
       "
 

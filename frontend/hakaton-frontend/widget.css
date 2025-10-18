@@ -139,7 +139,6 @@ p {
 
 .chatMessage.ai {
     background-color: var(--color--widgetChatMessageAIBackgroundColor);
-    border: 2px solid rgba(59, 130, 246, 0.5);
     margin-left: 0;
     margin-right: auto;
     float: left;
