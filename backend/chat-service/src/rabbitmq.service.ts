@@ -44,11 +44,11 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     this.connection = amqp.connect([this.RABBITMQ_URL]);
 
     this.connection.on('connect', () => {
-      console.log('✅ Успешно подключен к RabbitMQ');
+      console.log('Успешно подключен к RabbitMQ');
     });
 
     this.connection.on('disconnect', (err: any) => {
-      console.log('❌ Отключен от RabbitMQ:', err?.message || 'неизвестная ошибка');
+      console.log('Отключен от RabbitMQ:', err?.message || 'неизвестная ошибка');
     });
 
     this.channelWrapper = this.connection.createChannel({
@@ -57,17 +57,17 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
         // Очереди уже созданы через rabbitmq-definitions.json в docker-compose
         // Просто проверяем их наличие (assertQueue с passive:true только проверяет, не создает)
         await channel.checkQueue(this.DB_QUEUE);
-        console.log(`✅ Очередь для БД "${this.DB_QUEUE}" найдена`);
+        console.log(`Очередь для БД "${this.DB_QUEUE}" найдена`);
 
         await channel.checkQueue(this.AI_REQUEST_QUEUE);
         await channel.checkQueue(this.AI_RESPONSE_QUEUE);
-        console.log(`✅ Очереди для AI сервиса найдены`);
+        console.log(`Очереди для AI сервиса найдены`);
 
         // Подписываемся на ответы от AI агента
         await channel.consume(this.AI_RESPONSE_QUEUE, (msg) => {
           if (msg !== null) {
             const response: AIResponse = JSON.parse(msg.content.toString());
-            console.log('🤖 Получен ответ от AI агента:', response);
+            console.log('Получен ответ от AI агента:', response);
 
             if (this.aiResponseCallback) {
               this.aiResponseCallback(response);
@@ -77,7 +77,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
           }
         });
 
-        console.log(`✅ Подписан на очередь ответов от AI`);
+        console.log(`Подписан на очередь ответов от AI`);
       },
     });
   }
@@ -95,10 +95,10 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
           contentType: 'application/json'
         } as any
       );
-      console.log('💾 Сообщение отправлено в БД сервис:', message);
+      console.log('Сообщение отправлено в БД сервис:', message);
       return true;
     } catch (error) {
-      console.error('❌ Ошибка отправки сообщения в БД:', error);
+      console.error('Ошибка отправки сообщения в БД:', error);
       return false;
     }
   }
@@ -120,7 +120,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
           contentType: 'application/json'
         } as any
       );
-      console.log('🤖 Запрос отправлен AI сервису:', {
+      console.log('Запрос отправлен AI сервису:', {
         chatId: request.chatId,
         message: request.message,
         historyLength: request.messageHistory.length,
@@ -128,7 +128,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
       });
       return true;
     } catch (error) {
-      console.error('❌ Ошибка отправки запроса в AI:', error);
+      console.error('Ошибка отправки запроса в AI:', error);
       return false;
     }
   }
@@ -147,6 +147,6 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     if (this.connection) {
       await this.connection.close();
     }
-    console.log('✅ Отключен от RabbitMQ');
+    console.log('Отключен от RabbitMQ');
   }
 }
