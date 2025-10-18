@@ -119,6 +119,7 @@ class ParagraphRetriever(BaseRetriever):
     question_tokens: int = 0
     reserved_output_tokens: int = 150
     tokenizer: Optional[PreTrainedTokenizerBase] = None
+    current_agent: Optional[str] = None  # ← добавьте эту строку
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -141,40 +142,99 @@ class ParagraphRetriever(BaseRetriever):
             if not os.path.exists(file_path):
                 logger.error(f"Файл {file_path} не найден.")
                 self.paragraphs[agent] = []
-                self.paragraph_embeddings[agent] = []
+                self.paragraph_embeddings[agent] = np.array([], dtype=np.float32)
                 continue
+            
+            # Чтение файла
             with open(file_path, "r", encoding="utf-8") as f:
                 text = f.read()
             paragraphs = split_into_paragraphs(text)
             logger.info(f"Разбито на {len(paragraphs)} абзацев из файла {file_path}")
 
-            # Проверка, есть ли эмбеддинги в ChromaDB
-            existing_ids = collection.get(where={"agent": agent})["ids"]
-            if not existing_ids:
-                # Вычисление эмбеддингов
-                paragraph_embeddings = self.embeddings_model.encode(
-                    paragraphs,
-                    prompt_name="search_document",
-                    convert_to_numpy=True,
-                    normalize_embeddings=True
-                )
-                # Сохранение в ChromaDB
-                for i, (paragraph, embedding) in enumerate(zip(paragraphs, paragraph_embeddings)):
-                    collection.add(
-                        documents=[paragraph],
-                        embeddings=[embedding.tolist()],
-                        ids=[f"{agent}_{i}"],
-                        metadatas=[{"agent": agent}]
+            try:
+                # Проверка, есть ли записи в ChromaDB
+                results = collection.get(where={"agent": agent}, include=["documents", "embeddings", "metadatas"])
+                existing_ids = results["ids"]
+                logger.info(f"Найдено {len(existing_ids)} записей в ChromaDB для агента {agent}")
+
+                if not existing_ids:
+                    if not paragraphs:
+                        logger.warning(f"Нет параграфов для агента {agent}")
+                        self.paragraphs[agent] = []
+                        self.paragraph_embeddings[agent] = np.array([], dtype=np.float32)
+                        continue
+                    
+                    # Вычисление эмбеддингов
+                    paragraph_embeddings = self.embeddings_model.encode(
+                        paragraphs,
+                        prompt_name="search_document",
+                        convert_to_numpy=True,
+                        normalize_embeddings=True
                     )
-                logger.info(f"Сохранены эмбеддинги для {agent} в ChromaDB")
-                self.paragraphs[agent] = paragraphs
-                self.paragraph_embeddings[agent] = paragraph_embeddings
-            else:
-                # Загрузка из ChromaDB
-                results = collection.get(where={"agent": agent})
-                self.paragraphs[agent] = results["documents"]
-                self.paragraph_embeddings[agent] = np.array(results["embeddings"])
-                logger.info(f"Загружено {len(self.paragraphs[agent])} абзацев для агента {agent} из ChromaDB")
+                    
+                    # Проверка формы и типа эмбеддингов
+                    if not isinstance(paragraph_embeddings, np.ndarray) or paragraph_embeddings.ndim != 2:
+                        logger.error(f"Некорректная форма эмбеддингов для агента {agent}: {type(paragraph_embeddings)}")
+                        self.paragraphs[agent] = []
+                        self.paragraph_embeddings[agent] = np.array([], dtype=np.float32)
+                        continue
+                    
+                    # Проверка на NaN
+                    if np.any(np.isnan(paragraph_embeddings)):
+                        logger.error(f"Обнаружены NaN в эмбеддингах для агента {agent}")
+                        self.paragraphs[agent] = []
+                        self.paragraph_embeddings[agent] = np.array([], dtype=np.float32)
+                        continue
+                    
+                    # Сохранение в ChromaDB
+                    ids = [f"{agent}_{i}" for i in range(len(paragraphs))]
+                    collection.add(
+                        documents=paragraphs,
+                        embeddings=paragraph_embeddings.tolist(),
+                        metadatas=[{"agent": agent} for _ in paragraphs],
+                        ids=ids
+                    )
+                    logger.info(f"Сохранены {len(paragraphs)} эмбеддингов для агента {agent} в ChromaDB, shape: {paragraph_embeddings.shape}")
+                    self.paragraphs[agent] = paragraphs
+                    self.paragraph_embeddings[agent] = paragraph_embeddings
+                else:
+                    # Загрузка из ChromaDB
+                    paragraphs = results["documents"]
+                    embeddings = results["embeddings"]
+                    
+                    if not paragraphs or not embeddings:
+                        logger.error(f"Пустые данные из ChromaDB для агента {agent}: documents={len(paragraphs)}, embeddings={len(embeddings)}")
+                        self.paragraphs[agent] = []
+                        self.paragraph_embeddings[agent] = np.array([], dtype=np.float32)
+                        continue
+                    
+                    # Преобразование эмбеддингов
+                    try:
+                        embeddings = np.array(embeddings, dtype=np.float32)
+                        if embeddings.ndim != 2 or embeddings.shape[0] != len(paragraphs):
+                            logger.error(f"Некорректная форма эмбеддингов для агента {agent}: shape={embeddings.shape}, expected {len(paragraphs)} rows")
+                            self.paragraphs[agent] = []
+                            self.paragraph_embeddings[agent] = np.array([], dtype=np.float32)
+                            continue
+                        
+                        if np.any(np.isnan(embeddings)):
+                            logger.error(f"Обнаружены NaN в эмбеддингах из ChromaDB для агента {agent}")
+                            self.paragraphs[agent] = []
+                            self.paragraph_embeddings[agent] = np.array([], dtype=np.float32)
+                            continue
+                        
+                        self.paragraphs[agent] = paragraphs
+                        self.paragraph_embeddings[agent] = embeddings
+                        logger.info(f"Загружено {len(paragraphs)} абзацев для агента {agent}, embeddings shape: {embeddings.shape}")
+                    except (ValueError, TypeError) as e:
+                        logger.error(f"Ошибка преобразования эмбеддингов из ChromaDB для агента {agent}: {e}")
+                        self.paragraphs[agent] = []
+                        self.paragraph_embeddings[agent] = np.array([], dtype=np.float32)
+                        
+            except Exception as e:
+                logger.error(f"Ошибка при загрузке/сохранении эмбеддингов для агента {agent}: {e}")
+                self.paragraphs[agent] = []
+                self.paragraph_embeddings[agent] = np.array([], dtype=np.float32)
 
     def select_agent(self, query: str) -> Tuple[PreTrainedTokenizerBase, Any, str]:
         query_emb = self.embeddings_model.encode(
@@ -213,22 +273,82 @@ class ParagraphRetriever(BaseRetriever):
         return self.paragraphs[agent], self.paragraph_embeddings[agent]
 
     def _get_relevant_documents(self, query: str) -> List[Document]:
-        query_emb = self.embeddings_model.encode(
-            query,
-            prompt_name="search_query",
-            convert_to_numpy=True,
-            normalize_embeddings=True
-        )
-        sims = cosine_similarity([query_emb], self.paragraph_embeddings[self.current_agent])[0]
-        max_similarity = max(sims)
-        max_index = sims.argmax()
+        """
+        Получает релевантные документы на основе запроса, используя косинусное сходство.
         
-        if max_similarity < self.similarity_threshold:
+        Args:
+            query (str): Входной запрос пользователя.
+            
+        Returns:
+            List[Document]: Список релевантных документов или сообщение об ошибке.
+        """
+        if not query or not isinstance(query, str):
+            logger.error("Запрос пуст или не является строкой")
             return [Document(page_content="Не понял вопрос, уточните, пожалуйста!")]
-        
-        best_sentence = self.paragraphs[self.current_agent][max_index]
-        self._last_context_tokens = len(self.tokenizer.encode(best_sentence))
-        return [Document(page_content=best_sentence)]
+
+        if not self.current_agent or self.current_agent not in self.paragraph_embeddings:
+            logger.error(f"Текущий агент {self.current_agent} не найден или отсутствуют эмбеддинги")
+            return [Document(page_content="Не понял вопрос, уточните, пожалуйста!")]
+
+        try:
+            # Кодирование запроса
+            query_emb = self.embeddings_model.encode(
+                query,
+                prompt_name="search_query",
+                convert_to_numpy=True,
+                normalize_embeddings=True
+            )
+            if np.any(np.isnan(query_emb)):
+                logger.error("Обнаружены NaN в эмбеддингах запроса")
+                return [Document(page_content="Не понял вопрос, уточните, пожалуйста!")]
+
+            query_emb = query_emb.reshape(1, -1) if query_emb.ndim == 1 else query_emb
+            logger.info(f"Query embedding shape: {query_emb.shape}")
+
+            # Получение эмбеддингов параграфов
+            paragraph_embs = self.paragraph_embeddings[self.current_agent]
+            if not isinstance(paragraph_embs, np.ndarray) or paragraph_embs.ndim != 2 or paragraph_embs.size == 0:
+                logger.error(f"Эмбеддинги для агента {self.current_agent} некорректны, type: {type(paragraph_embs)}, shape: {getattr(paragraph_embs, 'shape', 'None')}")
+                # Попробуем загрузить из ChromaDB напрямую
+                results = collection.query(
+                    query_embeddings=[query_emb[0].tolist()],
+                    where={"agent": self.current_agent},
+                    n_results=10,
+                    include=["documents", "metadatas", "embeddings"]
+                )
+                if not results["documents"] or not results["embeddings"]:
+                    logger.error(f"Пустые данные из ChromaDB для агента {self.current_agent}: documents={len(results['documents'])}, embeddings={len(results['embeddings'])}")
+                    return [Document(page_content="Не понял вопрос, уточните, пожалуйста!")]
+                
+                self.paragraphs[self.current_agent] = results["documents"]
+                self.paragraph_embeddings[self.current_agent] = np.array(results["embeddings"], dtype=np.float32)
+                paragraph_embs = self.paragraph_embeddings[self.current_agent]
+                logger.info(f"Загружено {len(results['documents'])} документов из ChromaDB для агента {self.current_agent}")
+
+            if np.any(np.isnan(paragraph_embs)):
+                logger.error(f"Обнаружены NaN в эмбеддингах параграфов для агента {self.current_agent}")
+                return [Document(page_content="Не понял вопрос, уточните, пожалуйста!")]
+
+            logger.info(f"Paragraph embeddings shape: {paragraph_embs.shape}")
+
+            # Вычисление косинусного сходства
+            sims = cosine_similarity(query_emb, paragraph_embs)[0]
+            max_similarity = np.max(sims)
+            max_index = np.argmax(sims)
+
+            if max_similarity < self.similarity_threshold:
+                logger.info(f"Максимальное сходство {max_similarity:.2f} ниже порога {self.similarity_threshold}")
+                return [Document(page_content="Не понял вопрос, уточните, пожалуйста!")]
+
+            best_sentence = self.paragraphs[self.current_agent][max_index]
+            if self.tokenizer:
+                self._last_context_tokens = len(self.tokenizer.encode(best_sentence))
+            logger.info(f"Выбран параграф с индексом {max_index}, сходство: {max_similarity:.2f}")
+            return [Document(page_content=best_sentence)]
+
+        except Exception as e:
+            logger.error(f"Ошибка в _get_relevant_documents: {e}")
+            return [Document(page_content="Не понял вопрос, уточните, пожалуйста!")]
 
     async def _aget_relevant_documents(self, query: str) -> List[Document]:
         return self._get_relevant_documents(query)
