@@ -24,7 +24,7 @@
         // Запросы идут через Kong Gateway (порт 8000)
         // Kong проверит домен в БД и добавит AI модель в headers
         Promise.all([
-            fetch(`${usr}:8000/widget/html`).then(r => {
+            fetch(`${url}:8000/widget/html`).then(r => {
                 if (!r.ok) {
                     throw new Error('Access denied: Domain not authorized');
                 }
