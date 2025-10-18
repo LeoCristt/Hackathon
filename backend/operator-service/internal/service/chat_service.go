@@ -27,13 +27,21 @@ func (s *ChatService) SaveMessage(chatID string, username, messageText string, I
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			chat = &models.Chat{
-				ID: chatID,
+				ID:        chatID,
+				IsManager: IsManager,
 			}
 			if err := s.repo.CreateChat(chat); err != nil {
 				return fmt.Errorf("failed to create chat with ID %s: %w", chatID, err)
 			}
 		} else {
 			return fmt.Errorf("failed to get chat with ID %s: %w", chatID, err)
+		}
+	} else {
+		if IsManager && !chat.IsManager {
+			if err := s.repo.UpdateIsManager(chatID, true); err != nil {
+				return fmt.Errorf("failed to update is_manager for chat %s: %w", chatID, err)
+			}
+			chat.IsManager = true
 		}
 	}
 
@@ -48,7 +56,6 @@ func (s *ChatService) SaveMessage(chatID string, username, messageText string, I
 			Username:        username,
 			Message:         messageText,
 			MessageSequence: lastSeq + 1,
-			IsManager:       IsManager,
 			CreatedAt:       createdAt,
 		}
 

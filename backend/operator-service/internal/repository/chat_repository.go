@@ -61,12 +61,12 @@ func (r *ChatRepository) GetChatSummaries() ([]models.GetChatSummary, error) {
 
 	subQuery := r.db.Table("messages").
 		Select("DISTINCT ON (chat_id) chat_id, message, created_at").
-		Where("is_manager = ?", true).
 		Order("chat_id, message_sequence DESC")
 
 	err := r.db.Table("chats").
 		Select("chats.id as chat_id, sub.message as last_message, chats.updated_at").
 		Joins("LEFT JOIN (?) as sub ON chats.id = sub.chat_id", subQuery).
+		Where("is_manager = ?", true).
 		Order("chats.updated_at DESC").
 		Scan(&summaries).Error
 
@@ -75,4 +75,10 @@ func (r *ChatRepository) GetChatSummaries() ([]models.GetChatSummary, error) {
 	}
 
 	return summaries, nil
+}
+
+func (r *ChatRepository) UpdateIsManager(chatID string, value bool) error {
+	return r.db.Model(&models.Chat{}).
+		Where("id = ?", chatID).
+		Update("is_manager", value).Error
 }
