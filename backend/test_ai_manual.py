@@ -21,12 +21,13 @@ def connect_rabbitmq():
         print("Убедитесь, что RabbitMQ запущен: docker-compose ps")
         exit(1)
 
-def send_ai_response(channel, chat_id, answer, bot_username):
+def send_ai_response(channel, chat_id, answer, bot_username, is_manager=False):
     """Отправка ответа в очередь ai_responses"""
     response = {
         'chatId': chat_id,
         'answer': answer,
-        'botUsername': bot_username
+        'botUsername': bot_username,
+        'isManager': is_manager
     }
 
     channel.basic_publish(
@@ -42,6 +43,7 @@ def send_ai_response(channel, chat_id, answer, bot_username):
     print(f"   Chat ID: {chat_id}")
     print(f"   Answer: {answer}")
     print(f"   Bot Username: {bot_username}")
+    print(f"   isManager: {is_manager}")
 
 def listen_requests(channel):
     """Слушаем очередь ai_requests и выводим их"""
@@ -96,7 +98,10 @@ def manual_mode(channel):
     if not bot_username:
         bot_username = "AI-помощник"
 
-    send_ai_response(channel, chat_id, answer, bot_username)
+    is_manager_input = input("Требуется менеджер? (y/n) [n]: ").strip().lower()
+    is_manager = is_manager_input == 'y'
+
+    send_ai_response(channel, chat_id, answer, bot_username, is_manager)
 
 if __name__ == '__main__':
     connection = connect_rabbitmq()
