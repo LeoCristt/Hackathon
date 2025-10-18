@@ -1,24 +1,18 @@
-# Используем официальный Python образ
-FROM python:3.10-slim
+FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
 
-# Устанавливаем рабочую директорию
+ENV PYTHONUNBUFFERED=1
+
+RUN apt-get update && apt-get install -y \
+    python3-pip \
+    python3-dev \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
-# Копируем зависимости
 COPY requirements.txt .
+RUN pip3 install -r requirements.txt
 
-# Устанавливаем зависимости
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Копируем исходники приложения
 COPY . .
 
-# Указываем порт (если ты используешь FastAPI/Flask)
-EXPOSE 8000
-
-# Команда для запуска приложения
-# Flask:
-# CMD ["python", "main.py"]
-
-# FastAPI (через Uvicorn):
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD python3 model.py  # Исправлено здесь

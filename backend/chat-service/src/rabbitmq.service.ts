@@ -11,7 +11,8 @@ interface AIRequest {
 
 interface AIResponse {
   chatId: string;
-  response: string;
+  answer: string;
+  botUsername: string;
 }
 
 @Injectable()
@@ -24,7 +25,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
 
   // Очереди для AI-сервиса
   private readonly AI_REQUEST_QUEUE = 'ai_requests';
-  private readonly AI_RESPONSE_QUEUE = 'ai_responses';
+  private readonly AI_RESPONSE_QUEUE = 'ai_response';
 
   private readonly RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://guest:guest@rabbitmq:5672';
   private aiResponseCallback: ((response: AIResponse) => void) | null = null;

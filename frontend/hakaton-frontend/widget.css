@@ -5,6 +5,7 @@
     --color--widgetChatBackgroundColor: rgba(255, 255, 255, 1);
     --color--widgetChatMessageUserBackgroundColor: rgba(235, 255, 161, 0.25);
     --color--widgetChatMessageManagerBackgroundColor: rgba(255, 214, 148, 0.25);
+    --color--widgetChatMessageAIBackgroundColor: rgba(59, 130, 246, 0.15);
 
     --size--widgetWidth: 336px;
     --size--minimizedWidgetHeight: 60px;
@@ -129,9 +130,15 @@ p {
     text-align: left;
 }
 
-.chatMessage.ai,
 .chatMessage.manager {
     background-color: var(--color--widgetChatMessageManagerBackgroundColor);
+    margin-left: 0;
+    margin-right: auto;
+    float: left;
+}
+
+.chatMessage.ai {
+    background-color: var(--color--widgetChatMessageAIBackgroundColor);
     margin-left: 0;
     margin-right: auto;
     float: left;
@@ -145,7 +152,7 @@ p {
 }
 
 .chatMessage.ai .messageUsername {
-    color: #10b981;
+    color: #2563eb;
 }
 
 .chatMessage.manager .messageUsername {
