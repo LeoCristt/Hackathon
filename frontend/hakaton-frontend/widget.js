@@ -1,4 +1,5 @@
 (function() {
+    let url = "http://172.29.67.31"
     let socket = null;
     let chatId = null;
 
@@ -23,13 +24,13 @@
         // Запросы идут через Kong Gateway (порт 8000)
         // Kong проверит домен в БД и добавит AI модель в headers
         Promise.all([
-            fetch('http://localhost:8000/widget/html').then(r => {
+            fetch(`${url}:8000/widget/html`).then(r => {
                 if (!r.ok) {
                     throw new Error('Access denied: Domain not authorized');
                 }
                 return r.json();
             }),
-            fetch('http://localhost:8000/widget/css').then(r => r.json())
+            fetch(`${url}:8000/widget/css`).then(r => r.json())
         ]).then(([htmlData, cssData]) => {
             // Создаем Shadow DOM
             const container = document.createElement('div');
@@ -98,7 +99,7 @@
         script.onload = () => {
             // Подключаемся к WebSocket серверу через Kong
             // Socket.IO автоматически использует путь /socket.io/
-            socket = io('http://localhost:8000');
+            socket = io(`${url}:8000`);
 
             socket.on('connect', () => {
                 console.log('✅ Подключен к чату');
