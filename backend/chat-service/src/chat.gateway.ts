@@ -47,13 +47,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
     this.rabbitMQService.setAIResponseCallback((response) => {
       this.handleAIResponse(response);
     });
-    console.log('✅ ChatGateway инициализирован, подписка на AI ответы настроена');
+    console.log('ChatGateway инициализирован, подписка на AI ответы настроена');
   }
 
   private async handleAIResponse(response: { chatId: string; answer: string; botUsername: string; isManager?: boolean }) {
     const { chatId, answer, botUsername, isManager } = response;
 
-    console.log('\n🎯 ═══ ПОЛУЧЕН ОТВЕТ ОТ AI СЕРВИСА ═══');
+    console.log('\n═══ ПОЛУЧЕН ОТВЕТ ОТ AI СЕРВИСА ═══');
     console.log('Очередь: ai_responses');
     console.log('Chat ID:', chatId);
     console.log('Ответ AI:', answer);
@@ -72,48 +72,48 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
       chatId,
     };
 
-    console.log('\n📝 Сформированное сообщение AI:');
+    console.log('\nСформированное сообщение AI:');
     console.log('  Sequence:', sequence);
     console.log('  Username:', botUsername);
 
     // Кэшируем ответ AI в Redis
     await this.redisService.cacheMessage(chatId, chatMessage);
-    console.log('✅ Ответ AI закэширован в Redis');
+    console.log('Ответ AI закэширован в Redis');
 
     // Если AI запросил менеджера, сохраняем флаг в Redis
     if (isManager) {
       await this.redisService.setManagerRequired(chatId, true);
-      console.log('🔔 Установлен флаг isManager=true для чата', chatId);
+      console.log('Установлен флаг isManager=true для чата', chatId);
     }
 
     // Сохраняем ответ AI в БД через RabbitMQ (включая isManager флаг)
-    console.log('\n📦 ═══ ОТПРАВКА ОТВЕТА AI В БД ═══');
+    console.log('\n═══ ОТПРАВКА ОТВЕТА AI В БД ═══');
     console.log('Очередь: db_messages');
     const dbPayload = { ...chatMessage, isManager: isManager || false };
     console.log('Данные:', JSON.stringify(dbPayload, null, 2));
     if (isManager) {
-      console.log('🔔 ОТПРАВЛЯЕМ isManager=true в operator-service через очередь db_messages');
+      console.log('ОТПРАВЛЯЕМ isManager=true в operator-service через очередь db_messages');
     }
     await this.rabbitMQService.sendMessageToDB(dbPayload);
-    console.log('✅ Ответ AI отправлен в БД');
+    console.log('Ответ AI отправлен в БД');
 
     // Отправляем ответ AI всем участникам чата через WebSocket
     const chatSockets = this.chatRooms.get(chatId);
     if (chatSockets) {
-      console.log('\n🌐 Отправка ответа AI через WebSocket');
+      console.log('\nОтправка ответа AI через WebSocket');
       console.log('  Количество подключенных клиентов:', chatSockets.size);
       chatSockets.forEach(socketId => {
         this.server.to(socketId).emit('message', chatMessage);
       });
-      console.log('✅ Ответ AI отправлен всем участникам чата\n');
+      console.log('Ответ AI отправлен всем участникам чата\n');
     } else {
-      console.log('⚠️ Нет подключенных клиентов в чате', chatId, '\n');
+      console.log('Нет подключенных клиентов в чате', chatId, '\n');
     }
   }
 
   handleConnection(client: Socket) {
-    console.log(`🔗 Клиент подключен: ${client.id}`);
-    console.log('📋 Headers:', JSON.stringify(client.handshake.headers, null, 2));
+    console.log(`Клиент подключен: ${client.id}`);
+    console.log('Headers:', JSON.stringify(client.handshake.headers, null, 2));
 
     // Читаем AI модель из headers (добавлена Kong plugin request-transformer)
     const aiModel = client.handshake.headers['x-widget-ai-model'] as string;
@@ -121,12 +121,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
     const isAuthorized = client.handshake.headers['x-widget-authorized'] as string;
 
     if (!isAuthorized || isAuthorized !== 'true') {
-      console.error(`❌ Клиент не авторизован: ${client.id}`);
+      console.error(`Клиент не авторизован: ${client.id}`);
       client.disconnect();
       return;
     }
 
-    console.log(`✅ Авторизован: domain=${domain}, ai_model=${aiModel}`);
+    console.log(`Авторизован: domain=${domain}, ai_model=${aiModel}`);
 
     // Извлекаем username из токена (если есть)
     let username = null;
@@ -137,9 +137,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
         // Декодируем JWT без проверки подписи (подпись уже проверена на Gateway)
         const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
         username = payload.username;
-        console.log(`👤 Username из токена: ${username}`);
+        console.log(`Username из токена: ${username}`);
       } catch (error) {
-        console.error('❌ Ошибка при декодировании токена:', error);
+        console.error('Ошибка при декодировании токена:', error);
       }
     }
 
@@ -166,7 +166,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
       }
 
       this.connectedUsers.delete(client.id);
-      console.log(`🔌 Клиент отключен: ${client.id} (${username})`);
+      console.log(`Клиент отключен: ${client.id} (${username})`);
     }
   }
 
@@ -193,12 +193,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
     }
     this.chatRooms.get(chatId)!.add(client.id);
 
-    console.log(`👤 ${username} присоединился к чату ${chatId} (${client.id})`);
+    console.log(`${username} присоединился к чату ${chatId} (${client.id})`);
 
     // Получаем историю сообщений из Redis
     const messageHistory = await this.redisService.getMessageHistory(chatId);
 
-    console.log(`📚 Отправка истории сообщений (${messageHistory.length} шт.) для ${username}`);
+    console.log(`Отправка истории сообщений (${messageHistory.length} шт.) для ${username}`);
 
     // Отправляем историю только этому клиенту
     if (messageHistory.length > 0) {
@@ -238,7 +238,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
       chatId,
     };
 
-    console.log(`💬 #${sequence} Сообщение от ${username} в чате ${chatId}: ${data.message}`);
+    console.log(`#${sequence} Сообщение от ${username} в чате ${chatId}: ${data.message}`);
 
     // 1. Отправляем сообщение всем участникам чата через WebSocket
     const chatSockets = this.chatRooms.get(chatId);
@@ -252,11 +252,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
     await this.redisService.cacheMessage(chatId, chatMessage);
 
     // 3. Отправляем сообщение в БД для сохранения (по одному сообщению)
-    console.log('\n📦 ═══ ОТПРАВКА В БД СЕРВИС ═══');
+    console.log('\n═══ ОТПРАВКА В БД СЕРВИС ═══');
     console.log('Очередь: db_messages');
     console.log('Данные:', JSON.stringify(chatMessage, null, 2));
     await this.rabbitMQService.sendMessageToDB(chatMessage);
-    console.log('✅ Сообщение отправлено в БД\n');
+    console.log('Сообщение отправлено в БД\n');
 
     // 4. Проверяем, требуется ли менеджер для этого чата
     const isManagerRequired = await this.redisService.isManagerRequired(chatId);
@@ -278,7 +278,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
         aiId: aiModel, // AI модель из Kong plugin
       };
 
-      console.log('\n🤖 ═══ ОТПРАВКА В AI СЕРВИС ═══');
+      console.log('\n═══ ОТПРАВКА В AI СЕРВИС ═══');
       console.log('Очередь: ai_requests');
       console.log('Chat ID:', chatId);
       console.log('Domain:', domain);
@@ -287,9 +287,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
       console.log('AI Model (из Kong):', aiModel);
       console.log('Полные данные:', JSON.stringify(aiRequest, null, 2));
       await this.rabbitMQService.sendToAI(aiRequest);
-      console.log('✅ Запрос отправлен в AI сервис\n');
+      console.log('Запрос отправлен в AI сервис\n');
     } else {
-      console.log('\n⚠️ Чат в режиме ожидания менеджера - AI запрос не отправлен');
+      console.log('\nЧат в режиме ожидания менеджера - AI запрос не отправлен');
     }
 
     return { status: 'ok', message: 'Сообщение отправлено' };

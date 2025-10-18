@@ -35,15 +35,15 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     });
 
     this.client.on('connect', () => {
-      console.log('✅ Успешно подключен к Redis');
+      console.log('Успешно подключен к Redis');
     });
 
     this.client.on('error', (err: Error) => {
-      console.error('❌ Ошибка Redis:', err.message);
+      console.error('Ошибка Redis:', err.message);
     });
 
     this.client.on('close', () => {
-      console.log('⚠️ Соединение с Redis закрыто');
+      console.log('Соединение с Redis закрыто');
     });
   }
 
@@ -56,18 +56,13 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       const key = `chat:${chatId}:messages`;
       const messageJson = JSON.stringify(message);
 
-      // Добавляем сообщение в конец списка
       await this.client.rpush(key, messageJson);
-
-      // Обрезаем список, оставляя только последние N сообщений
       await this.client.ltrim(key, -this.MAX_MESSAGES_PER_CHAT, -1);
-
-      // Устанавливаем TTL на 24 часа (опционально)
       await this.client.expire(key, 86400);
 
-      console.log(`💾 Сообщение закэширован в Redis для чата ${chatId}`);
+      console.log(`Сообщение закэширован в Redis для чата ${chatId}`);
     } catch (error) {
-      console.error('❌ Ошибка кэширования сообщения:', error);
+      console.error('Ошибка кэширования сообщения:', error);
     }
   }
 
@@ -86,11 +81,11 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
       const parsedMessages = messages.map((msg) => JSON.parse(msg));
 
-      console.log(`📖 Получено ${parsedMessages.length} сообщений из кэша для чата ${chatId}`);
+      console.log(`Получено ${parsedMessages.length} сообщений из кэша для чата ${chatId}`);
 
       return parsedMessages;
     } catch (error) {
-      console.error('❌ Ошибка получения истории сообщений:', error);
+      console.error('Ошибка получения истории сообщений:', error);
       return [];
     }
   }
@@ -102,9 +97,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     try {
       const key = `chat:${chatId}:messages`;
       await this.client.del(key);
-      console.log(`🗑️ История сообщений очищена для чата ${chatId}`);
+      console.log(`История сообщений очищена для чата ${chatId}`);
     } catch (error) {
-      console.error('❌ Ошибка очистки истории:', error);
+      console.error('Ошибка очистки истории:', error);
     }
   }
 
@@ -116,7 +111,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       const key = `chat:${chatId}:messages`;
       return await this.client.llen(key);
     } catch (error) {
-      console.error('❌ Ошибка получения количества сообщений:', error);
+      console.error('Ошибка получения количества сообщений:', error);
       return 0;
     }
   }
@@ -133,10 +128,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       // Устанавливаем TTL на 7 дней для счетчика
       await this.client.expire(key, 604800);
 
-      console.log(`🔢 Получен sequence ${sequence} для чата ${chatId}`);
+      console.log(`Получен sequence ${sequence} для чата ${chatId}`);
       return sequence;
     } catch (error) {
-      console.error('❌ Ошибка получения sequence:', error);
+      console.error('Ошибка получения sequence:', error);
       // В случае ошибки возвращаем timestamp как fallback
       return Date.now();
     }
@@ -151,13 +146,13 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       if (required) {
         await this.client.set(key, '1');
         await this.client.expire(key, 86400); // TTL 24 часа
-        console.log(`🔔 Флаг manager_required установлен для чата ${chatId}`);
+        console.log(`Флаг manager_required установлен для чата ${chatId}`);
       } else {
         await this.client.del(key);
-        console.log(`🔕 Флаг manager_required снят для чата ${chatId}`);
+        console.log(`Флаг manager_required снят для чата ${chatId}`);
       }
     } catch (error) {
-      console.error('❌ Ошибка установки флага manager_required:', error);
+      console.error('Ошибка установки флага manager_required:', error);
     }
   }
 
@@ -170,7 +165,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       const value = await this.client.get(key);
       return value === '1';
     } catch (error) {
-      console.error('❌ Ошибка проверки флага manager_required:', error);
+      console.error('Ошибка проверки флага manager_required:', error);
       return false;
     }
   }
@@ -178,7 +173,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   private async disconnect() {
     if (this.client) {
       await this.client.quit();
-      console.log('✅ Отключен от Redis');
+      console.log('Отключен от Redis');
     }
   }
 }
