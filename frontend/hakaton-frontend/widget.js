@@ -1,5 +1,5 @@
 (function() {
-    let url = "http://192.168.88.78"
+    let url = "http://172.29.67.31"
     let socket = null;
     let chatId = null;
 
