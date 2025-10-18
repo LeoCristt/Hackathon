@@ -22,9 +22,9 @@ func (s *Server) RegisterRoutes() http.Handler {
 		AllowCredentials: true,
 	}))
 
-	userRepo := repository.NewUserRepository(s.db.DB())
-	userService := service.NewUserService(userRepo)
-	authHandler := handlers.NewAuthHandler(userService)
+	authRepo := repository.NewAuthRepository(s.db.DB())
+	authService := service.NewAuthService(authRepo)
+	authHandler := handlers.NewAuthHandler(authService)
 
 	chatRepo := repository.NewChatRepository(s.db.DB())
 	chatService := service.NewChatService(chatRepo)
@@ -34,9 +34,14 @@ func (s *Server) RegisterRoutes() http.Handler {
 	adminService := service.NewAdminService(adminRepo)
 	adminHandler := handlers.NewAdminHandler(adminService)
 
+	userRepo := repository.NewUserRepository(s.db.DB())
+	userService := service.NewUserService(userRepo)
+	userHandler := handlers.NewUserHandler(userService)
+
 	routes.RegisterAuthRoutes(r, authHandler)
 	routes.RegisterChatRoutes(r, chatHandler)
 	routes.RegisterAdminRoutes(r, adminHandler)
+	routes.RegisterUserRoutes(r, userHandler)
 
 	go func() {
 		log.Printf("listening RabbitMQ queue: %s", s.rabbitCfg.Queue)

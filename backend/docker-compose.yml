@@ -138,6 +138,8 @@ services:
       curl -X POST http://kong:8001/services --data name=operator-service --data url=http://operator-service:8080 &&
       curl -X POST http://kong:8001/services/operator-service/routes --data 'paths[]=/api/auth' --data 'strip_path=false' &&
       curl -X POST http://kong:8001/services/operator-service/routes --data 'paths[]=/api/chats' --data 'strip_path=false' &&
+      curl -X POST http://kong:8001/services/operator-service/routes --data 'paths[]=/api/user' --data 'strip_path=false' &&
+      curl -X POST http://kong:8001/services/operator-service/routes --data 'paths[]=/api/admin' --data 'strip_path=false' &&
       echo 'Kong setup done!'
       "
 

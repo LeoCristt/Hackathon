@@ -7,12 +7,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterAuthRoutes(r *gin.Engine, authHandler *handlers.AuthHandler) {
-	api := r.Group("/api/auth")
+func RegisterUserRoutes(r *gin.Engine, UserHandler *handlers.UserHandler) {
+	api := r.Group("/api/user")
 	{
-		api.POST("/register", authHandler.Register)
-		api.POST("/login", authHandler.Login)
-
-		api.GET("/check_token", utils.AuthMiddleware())
+		api.POST("/requests/add", utils.AuthMiddleware(), UserHandler.CreateRequest)
 	}
 }

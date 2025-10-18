@@ -11,7 +11,5 @@ func RegisterAdminRoutes(r *gin.Engine, AdminHandler *handlers.AdminHandler) {
 	api := r.Group("/api/admin")
 	{
 		api.GET("/requests/all", utils.AuthMiddleware(), AdminHandler.GetAllRequests)
-
-		api.POST("/requests/add", utils.AuthMiddleware(), AdminHandler.CreateRequest)
 	}
 }
