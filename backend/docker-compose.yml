@@ -273,7 +273,7 @@ services:
     restart: always
 
   chromadb:
-    image: chromadb/chroma:latest # Используем стабильную версию
+    image: chromadb/chroma:0.5.3
     container_name: chromadb
     volumes:
       - chroma-data:/chroma/chroma  # Persistent volume для данных ChromaDB
