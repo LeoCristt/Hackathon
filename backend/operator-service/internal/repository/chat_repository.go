@@ -61,6 +61,7 @@ func (r *ChatRepository) GetChatSummaries() ([]models.GetChatSummary, error) {
 
 	subQuery := r.db.Table("messages").
 		Select("DISTINCT ON (chat_id) chat_id, message, created_at").
+		Where("is_manager = ?", true).
 		Order("chat_id, message_sequence DESC")
 
 	err := r.db.Table("chats").

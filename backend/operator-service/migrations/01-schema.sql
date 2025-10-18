@@ -25,7 +25,8 @@ CREATE TABLE IF NOT EXISTS messages (
     username VARCHAR(30) NOT NULL,
     message TEXT NOT NULL,
     message_sequence INTEGER NOT NULL,
-    chat_id VARCHAR(50) NOT NULL,  
+    chat_id VARCHAR(50) NOT NULL,
+    is_manager BOOLEAN NOT NULL DEFAULT false,  
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
     CONSTRAINT fk_chat FOREIGN KEY(chat_id) REFERENCES chats(id)
 );
