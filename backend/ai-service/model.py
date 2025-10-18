@@ -5,7 +5,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline, PreTrain
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 from sklearn.metrics.pairwise import cosine_similarity
-from typing import List, Dict, Tuple, Any
+from typing import List, Dict, Tuple, Any, Optional
 import logging
 from peft import PeftModel
 from sentence_transformers import SentenceTransformer
@@ -14,7 +14,10 @@ from numpy.typing import NDArray
 import os
 import pika
 import json
-from typing import Optional  # Добавляем для аннотации Optional
+import chromadb
+from chromadb import HttpClient
+from chromadb.config import Settings
+import uuid
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -24,12 +27,33 @@ logger.info(f"Используемое устройство: {device}")
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
 
+# --- Инициализация ChromaDB ---
+chroma_host = os.getenv("CHROMADB_HOST", "localhost")
+chroma_port = int(os.getenv("CHROMADB_PORT", 8000))
+chroma_client = HttpClient(
+    host=chroma_host,
+    port=chroma_port,
+    settings=Settings(allow_reset=True, anonymized_telemetry=False)
+)
+
+collection_name = "paragraph_embeddings"
+try:
+    collection = chroma_client.get_collection(collection_name)
+    logger.info(f"Коллекция {collection_name} найдена в ChromaDB.")
+except Exception as e:
+    logger.info(f"Создаём новую коллекцию {collection_name} в ChromaDB: {e}")
+    collection = chroma_client.create_collection(collection_name)
+
 # --- Разделение на абзацы ---
 def split_into_paragraphs(text: str) -> List[str]:
     paragraphs = [p.strip() for p in re.split(r'\n\s*\n|\n', text) if p.strip()]
     return paragraphs
 
+# Загрузка базовой модели
 model = AutoModelForCausalLM.from_pretrained(os.path.join(base_dir, "quantized_model"))
+base_tokenizer = AutoTokenizer.from_pretrained(os.path.join(base_dir, "quantized_model"))
+if base_tokenizer.pad_token is None:
+    base_tokenizer.pad_token = base_tokenizer.eos_token
 
 # --- Словарь для выбора модели, токенизатора и пути к файлу ---
 agent_map = {
@@ -60,8 +84,6 @@ agent_map = {
     }
 }
 
-base_dir = os.path.dirname(os.path.abspath(__file__))
-
 # --- Загрузка моделей и токенизаторов ---
 for agent in agent_map:
     agent_map[agent]["tokenizer"] = AutoTokenizer.from_pretrained(os.path.join(base_dir, f"{agent}/best_model"))
@@ -73,8 +95,8 @@ local_emb_model_path = os.path.join(base_dir, "frida_embedding_model")
 emb_model = SentenceTransformer(local_emb_model_path, device=device)
 
 class ParagraphRetriever(BaseRetriever):
-    paragraphs: List[str]
-    paragraph_embeddings: List[NDArray]
+    paragraphs: Dict[str, List[str]]  # Храним параграфы по агентам
+    paragraph_embeddings: Dict[str, List[NDArray]]  # Храним эмбеддинги по агентам
     embeddings_model: SentenceTransformer
     similarity_threshold: float = 0.25
     prompt_token_len: int = 0
@@ -87,12 +109,57 @@ class ParagraphRetriever(BaseRetriever):
         super().__init__(**kwargs)
         self._last_context_tokens = 0
         template_sample = "Ты — помощник, который строго отвечает только на основании предоставленного контекста и истории чата в одно предложение. Если контекста нет, отвечай на общие вопросы как дружелюбный бот (приветствия, прощания и т.д.).\n\n"
-        self.tokenizer = agent_map["Сеть"]["tokenizer"]  # Токенизатор по умолчанию
+        self.tokenizer = agent_map["Сеть"]["tokenizer"]
         self.prompt_token_len = len(self.tokenizer.encode(template_sample))
+        self.paragraphs = {}  # Кэш параграфов
+        self.paragraph_embeddings = {}  # Кэш эмбеддингов
+        self.load_all_paragraphs()  # Загружаем все эмбеддинги при инициализации
 
     def set_dynamic_limits(self, question_tokens: int, history_tokens: int, max_total_tokens: int = 8192):
         self.question_tokens = question_tokens
         self.history_tokens = history_tokens
+
+    def load_all_paragraphs(self):
+        """Загружает или вычисляет эмбеддинги параграфов для всех агентов и кэширует их."""
+        for agent, config in agent_map.items():
+            file_path = config["file_path"]
+            if not os.path.exists(file_path):
+                logger.error(f"Файл {file_path} не найден.")
+                self.paragraphs[agent] = []
+                self.paragraph_embeddings[agent] = []
+                continue
+            with open(file_path, "r", encoding="utf-8") as f:
+                text = f.read()
+            paragraphs = split_into_paragraphs(text)
+            logger.info(f"Разбито на {len(paragraphs)} абзацев из файла {file_path}")
+
+            # Проверка, есть ли эмбеддинги в ChromaDB
+            existing_ids = collection.get(where={"agent": agent})["ids"]
+            if not existing_ids:
+                # Вычисление эмбеддингов
+                paragraph_embeddings = self.embeddings_model.encode(
+                    paragraphs,
+                    prompt_name="search_document",
+                    convert_to_numpy=True,
+                    normalize_embeddings=True
+                )
+                # Сохранение в ChromaDB
+                for i, (paragraph, embedding) in enumerate(zip(paragraphs, paragraph_embeddings)):
+                    collection.add(
+                        documents=[paragraph],
+                        embeddings=[embedding.tolist()],
+                        ids=[f"{agent}_{i}"],
+                        metadatas=[{"agent": agent}]
+                    )
+                logger.info(f"Сохранены эмбеддинги для {agent} в ChromaDB")
+                self.paragraphs[agent] = paragraphs
+                self.paragraph_embeddings[agent] = paragraph_embeddings
+            else:
+                # Загрузка из ChromaDB
+                results = collection.get(where={"agent": agent})
+                self.paragraphs[agent] = results["documents"]
+                self.paragraph_embeddings[agent] = np.array(results["embeddings"])
+                logger.info(f"Загружено {len(self.paragraphs[agent])} абзацев для агента {agent} из ChromaDB")
 
     def select_agent(self, query: str) -> Tuple[PreTrainedTokenizerBase, Any, str]:
         query_emb = self.embeddings_model.encode(
@@ -119,66 +186,28 @@ class ParagraphRetriever(BaseRetriever):
         return agent_map[selected_agent]["tokenizer"], agent_map[selected_agent]["model"], agent_map[selected_agent]["file_path"]
 
     def load_paragraphs(self, file_path: str) -> Tuple[List[str], List[NDArray]]:
-        if not os.path.exists(file_path):
-            logger.error(f"Файл {file_path} не найден.")
+        agent = os.path.basename(file_path).split(".")[0]
+        if agent not in self.paragraphs or agent not in self.paragraph_embeddings:
+            logger.error(f"Эмбеддинги для агента {agent} не найдены в кэше.")
             return [], []
-        with open(file_path, "r", encoding="utf-8") as f:
-            text = f.read()
-        paragraphs = split_into_paragraphs(text)
-        logger.info(f"Разбито на {len(paragraphs)} абзацев из файла {file_path}")
-        paragraph_embeddings = self.embeddings_model.encode(
-            paragraphs,
-            prompt_name="search_document",
-            convert_to_numpy=True,
-            normalize_embeddings=True
-        )
-        return paragraphs, paragraph_embeddings
+        logger.info(f"Используется кэш: загружено {len(self.paragraphs[agent])} абзацев для агента {agent}")
+        return self.paragraphs[agent], self.paragraph_embeddings[agent]
 
     def _get_relevant_documents(self, query: str) -> List[Document]:
-        greeting_phrases = [
-            "Ты кто?", "Ты бот?",
-            "Привет.", "Здравствуйте.",
-            "Как дела?",
-            "Спасибо.",
-            "Пока.", "До свидания."
-        ]
-        query_emb = emb_model.encode(
-            query,
-            prompt_name="paraphrase",
-            convert_to_numpy=True,
-            normalize_embeddings=True
-        )
-        phrases_emb = emb_model.encode(
-            greeting_phrases,
-            prompt_name="paraphrase",
-            convert_to_numpy=True,
-            normalize_embeddings=True
-        )
-        
-        # НАХОДИМ МАКСИМАЛЬНОЕ СХОЖЕСТВО
-        similarities = cosine_similarity([query_emb], phrases_emb)[0]
-        max_sim_idx = np.argmax(similarities)
-        max_similarity = similarities[max_sim_idx]
-        
-        logger.info(f"Приветствие - max_sim: {max_similarity:.3f}, фраза: '{greeting_phrases[max_sim_idx]}'")
-        
-        if max_similarity >= 0.7:
-            return [Document(greeting_phrases[max_sim_idx])]
-        # Обычный поиск
         query_emb = self.embeddings_model.encode(
             query,
             prompt_name="search_query",
             convert_to_numpy=True,
             normalize_embeddings=True
         )
-        sims = cosine_similarity([query_emb], self.paragraph_embeddings)[0]
+        sims = cosine_similarity([query_emb], self.paragraph_embeddings[self.current_agent])[0]
         max_similarity = max(sims)
         max_index = sims.argmax()
         
         if max_similarity < self.similarity_threshold:
             return [Document(page_content="Не понял вопрос, уточните, пожалуйста!")]
         
-        best_sentence = self.paragraphs[max_index]
+        best_sentence = self.paragraphs[self.current_agent][max_index]
         self._last_context_tokens = len(self.tokenizer.encode(best_sentence))
         return [Document(page_content=best_sentence)]
 
@@ -194,8 +223,8 @@ base_instruction = "Ты — помощник, который строго от�
 
 # --- RAG ---
 retriever = ParagraphRetriever(
-    paragraphs=[],
-    paragraph_embeddings=[],
+    paragraphs={},
+    paragraph_embeddings={},
     embeddings_model=emb_model
 )
 
@@ -227,7 +256,7 @@ def process_query(query: str, message_history: List[Dict[str, Any]] = None, curr
         if not query.strip():
             return "Введите корректный запрос.", message_history
 
-        # Проверка на фразу "Передай запрос специалисту." и приветствия до выбора агента
+        # Проверка на фразу "Передай запрос специалисту."
         query_emb = emb_model.encode(
             query,
             prompt_name="paraphrase",
@@ -248,13 +277,80 @@ def process_query(query: str, message_history: List[Dict[str, Any]] = None, curr
             message_history.append({"answer": answer})
             return answer, message_history
 
+        # Проверка на ненормативную лексику
+        profanity_phrases = [
+            "дурак", "идиот", "глупый", "матерное слово",
+            "ругательство", "похабщина"
+        ]
+        profanity_emb = emb_model.encode(
+            profanity_phrases,
+            prompt_name="paraphrase",
+            convert_to_numpy=True,
+            normalize_embeddings=True
+        )
+        profanity_sims = cosine_similarity([query_emb], profanity_emb)[0]
+        max_profanity_sim = max(profanity_sims)
+        max_profanity_idx = profanity_sims.argmax()
+        
+        logger.info(f"Ненормативная лексика - max_sim: {max_profanity_sim:.3f}, фраза: '{profanity_phrases[max_profanity_idx]}'")
+        if max_profanity_sim >= 0.7:
+            answer = "Ведите себя культурно!"
+            message_history.append({"username": current_username, "message": query})
+            message_history.append({"answer": answer})
+            return answer, message_history
+
+        # Проверка на приветствия
+        greeting_phrases = [
+            "Ты кто?", "Ты бот?",
+            "Привет.", "Здравствуйте.",
+            "Как дела?",
+            "Спасибо.",
+            "Пока.", "До свидания."
+        ]
+        phrases_emb = emb_model.encode(
+            greeting_phrases,
+            prompt_name="paraphrase",
+            convert_to_numpy=True,
+            normalize_embeddings=True
+        )
+        similarities = cosine_similarity([query_emb], phrases_emb)[0]
+        max_sim_idx = np.argmax(similarities)
+        max_similarity = similarities[max_sim_idx]
+        
+        logger.info(f"Приветствие - max_sim: {max_similarity:.3f}, фраза: '{greeting_phrases[max_sim_idx]}'")
+        
+        if max_similarity >= 0.7:
+            full_prompt = render_chat_with_context(message_history, query, "", current_username)
+            
+            hf_pipeline = pipeline(
+                "text-generation",
+                model=model,
+                tokenizer=base_tokenizer,
+                max_new_tokens=150,
+                temperature=0.1,
+                top_p=0.95,
+                repetition_penalty=1.1,
+                return_full_text=False
+            )
+            
+            generated = hf_pipeline(full_prompt)
+            answer_text = generated[0]['generated_text'].strip()
+            
+            sentences = list(sentenize(answer_text))
+            first_sentence = sentences[0].text if sentences else answer_text
+            
+            message_history.append({"username": current_username, "message": query})
+            message_history.append({"answer": first_sentence})
+            return first_sentence, message_history
+
         # Выбор агента
         selected_tokenizer, selected_model, file_path = retriever.select_agent(query)
         if selected_tokenizer is None or selected_model is None:
             return "Не понял вопрос, уточните, пожалуйста!", message_history
 
-        # Загрузка параграфов для выбранного агента
-        retriever.paragraphs, retriever.paragraph_embeddings = retriever.load_paragraphs(file_path)
+        # Устанавливаем текущего агента
+        retriever.current_agent = os.path.basename(file_path).split(".")[0]
+        retriever.paragraphs[retriever.current_agent], retriever.paragraph_embeddings[retriever.current_agent] = retriever.load_paragraphs(file_path)
 
         # Устанавливаем токенизатор для retriever
         retriever.tokenizer = selected_tokenizer

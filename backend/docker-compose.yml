@@ -4,6 +4,7 @@ networks:
 
 volumes:
   rabbitmq-data:
+  chroma-data:  # Новый volume для ChromaDB
 
 services:
   # PostgreSQL для User Service
@@ -271,6 +272,26 @@ services:
       - kong-net
     restart: always
 
+  chromadb:
+    image: chromadb/chroma:0.5.0  # Используем стабильную версию
+    container_name: chromadb
+    volumes:
+      - chroma-data:/chroma/chroma  # Persistent volume для данных ChromaDB
+    environment:
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/chroma
+      - ANONYMOUS_TELEMETRY=FALSE
+    ports:
+      - "8002:8000"  # Изменён порт, чтобы не конфликтовать с Kong (8000)
+    networks:
+      - kong-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v2/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   # RAG Bot Service (новый сервис для вашего RAG-бота с RabbitMQ)
   ai-service:
     build: 
@@ -280,10 +301,14 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy  # Ждем, пока RabbitMQ запустится
+      chromadb:
+        condition: service_healthy  # Добавляем зависимость от ChromaDB
     environment:
       RABBITMQ_HOST: rabbitmq  # Хост RabbitMQ внутри сети (используется в коде скрипта)
       QUEUE_IN: ai_requests    # Опционально: можно передать через env, если доработать скрипт
       QUEUE_OUT: ai_response
+      CHROMADB_HOST: chromadb  # Добавляем хост ChromaDB
+      CHROMADB_PORT: 8000      # Внутренний порт ChromaDB
     networks:
       - kong-net
     restart: unless-stopped
