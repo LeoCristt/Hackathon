@@ -1,0 +1,17 @@
+# Dockerfile для mock AI-сервиса (только метрики)
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Копируем только необходимые файлы для mock-сервиса
+COPY mock_metrics.py .
+COPY requirements-mock.txt .
+
+# Устанавливаем зависимости
+RUN pip install --no-cache-dir -r requirements-mock.txt
+
+# Экспозим порт для метрик Prometheus
+EXPOSE 1234
+
+# Запускаем mock-сервис
+CMD ["python", "mock_metrics.py"]
