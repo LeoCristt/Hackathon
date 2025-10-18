@@ -21,45 +21,59 @@ logger = logging.getLogger(__name__)
 device = "cuda" if torch.cuda.is_available() else "cpu"
 logger.info(f"Используемое устройство: {device}")
 
+base_dir = os.path.dirname(os.path.abspath(__file__))
+
 # --- Разделение на абзацы ---
 def split_into_paragraphs(text: str) -> List[str]:
     paragraphs = [p.strip() for p in re.split(r'\n\s*\n|\n', text) if p.strip()]
     return paragraphs
 
+# --- Словарь для выбора модели, токенизатора и пути к файлу ---
+agent_map = {
+    "Сеть": {
+        "model": None,
+        "tokenizer": None,
+        "file_path": os.path.join(base_dir, "Сеть.txt")
+    },
+    "Приложение": {
+        "model": None,
+        "tokenizer": None,
+        "file_path": os.path.join(base_dir, "Приложение.txt")
+    },
+    "Оборудование": {
+        "model": None,
+        "tokenizer": None,
+        "file_path": os.path.join(base_dir, "Оборудование.txt")
+    },
+    "Доступ и пароли": {
+        "model": None,
+        "tokenizer": None,
+        "file_path": os.path.join(base_dir, "Доступ и пароли.txt")
+    },
+    "Безопасность": {
+        "model": None,
+        "tokenizer": None,
+        "file_path": os.path.join(base_dir, "Безопасность.txt")
+    }
+}
+
 base_dir = os.path.dirname(os.path.abspath(__file__))
-file_path = os.path.join(base_dir, "Сеть.txt")
 
-with open(file_path, "r", encoding="utf-8") as f:
-    text = f.read()
-
-paragraphs = split_into_paragraphs(text)
-logger.info(f"Разбито на {len(paragraphs)} абзацев.")
+# --- Загрузка моделей и токенизаторов ---
+model = AutoModelForCausalLM.from_pretrained(os.path.join(base_dir, "quantized_model"))
+for agent in agent_map:
+    agent_map[agent]["tokenizer"] = AutoTokenizer.from_pretrained(os.path.join(base_dir, f"{agent}/best_model"))
+    agent_map[agent]["model"] = PeftModel.from_pretrained(model, os.path.join(base_dir, f"{agent}/best_model"))
+    if agent_map[agent]["tokenizer"].pad_token is None:
+        agent_map[agent]["tokenizer"].pad_token = agent_map[agent]["tokenizer"].eos_token
 
 local_emb_model_path = os.path.join(base_dir, "frida_embedding_model")
-
 emb_model = SentenceTransformer(local_emb_model_path, device=device)
-paragraph_embeddings = emb_model.encode(
-    paragraphs,
-    prompt_name="search_document",
-    convert_to_numpy=True,
-    normalize_embeddings=True
-)
-
-# --- Модель и токенизатор ---
-model = AutoModelForCausalLM.from_pretrained(os.path.join(base_dir, "quantized_model"))
-tokenizer = AutoTokenizer.from_pretrained(os.path.join(base_dir, "Сеть/best_model"))
-
-# --- LLM ---
-if tokenizer.pad_token is None:
-    tokenizer.pad_token = tokenizer.eos_token
-
-model = PeftModel.from_pretrained(model, os.path.join(base_dir, "Сеть/best_model"))
 
 class ParagraphRetriever(BaseRetriever):
     paragraphs: List[str]
     paragraph_embeddings: List[NDArray]
     embeddings_model: SentenceTransformer
-    tokenizer: PreTrainedTokenizerBase
     similarity_threshold: float = 0.25
     prompt_token_len: int = 0
     history_tokens: int = 0
@@ -69,34 +83,56 @@ class ParagraphRetriever(BaseRetriever):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._last_context_tokens = 0
-        # Оценка базового шаблона (system + borders)
-        template_sample = "Ты — помощник. Используй историю и контекст.\n\n"
+        template_sample = "Ты — помощник, который строго отвечает только на основании предоставленного контекста и истории чата в одно предложение. Если контекста нет, отвечай на общие вопросы как дружелюбный бот (приветствия, прощания и т.д.).\n\n"
+        self.tokenizer = agent_map["Сеть"]["tokenizer"]  # Токенизатор по умолчанию
         self.prompt_token_len = len(self.tokenizer.encode(template_sample))
 
     def set_dynamic_limits(self, question_tokens: int, history_tokens: int, max_total_tokens: int = 8192):
         self.question_tokens = question_tokens
         self.history_tokens = history_tokens
-        # Теперь не ограничиваем контекст заранее; обрезка истории происходит позже
 
-    def _get_relevant_documents(self, query: str) -> List[Document]:
+    def select_agent(self, query: str) -> Tuple[PreTrainedTokenizerBase, Any, str]:
         query_emb = self.embeddings_model.encode(
             query,
             prompt_name="paraphrase",
             convert_to_numpy=True,
             normalize_embeddings=True
         )
-        spech_phrase = "Передай запрос специалисту."
-        phrase_emb = self.embeddings_model.encode(
-            spech_phrase,
+        agent_names = list(agent_map.keys())
+        agent_embs = self.embeddings_model.encode(
+            agent_names,
             prompt_name="paraphrase",
             convert_to_numpy=True,
             normalize_embeddings=True
         )
-        sim = cosine_similarity([query_emb], [phrase_emb])
-        if sim >= 0.7:
-            # Нашли подходящую фразу — прерываем
-            return [Document(page_content=spech_phrase)]
-        # Обычный поиск, если не greeting или sim < 0.5
+        sims = cosine_similarity([query_emb], agent_embs)[0]
+        max_sim = max(sims)
+        max_idx = sims.argmax()
+
+        if max_sim < self.similarity_threshold:
+            return None, None, None
+        selected_agent = agent_names[max_idx]
+        logger.info(f"Выбран агент: {selected_agent} (similarity: {max_sim:.2f})")
+        return agent_map[selected_agent]["tokenizer"], agent_map[selected_agent]["model"], agent_map[selected_agent]["file_path"]
+
+    def load_paragraphs(self, file_path: str) -> Tuple[List[str], List[NDArray]]:
+        if not os.path.exists(file_path):
+            logger.error(f"Файл {file_path} не найден.")
+            return [], []
+        with open(file_path, "r", encoding="utf-8") as f:
+            text = f.read()
+        paragraphs = split_into_paragraphs(text)
+        logger.info(f"Разбито на {len(paragraphs)} абзацев из файла {file_path}")
+        paragraph_embeddings = self.embeddings_model.encode(
+            paragraphs,
+            prompt_name="search_document",
+            convert_to_numpy=True,
+            normalize_embeddings=True
+        )
+        return paragraphs, paragraph_embeddings
+
+    def _get_relevant_documents(self, query: str) -> List[Document]:
+        # Обычный поиск
         query_emb = self.embeddings_model.encode(
             query,
             prompt_name="search_query",
@@ -108,43 +144,9 @@ class ParagraphRetriever(BaseRetriever):
         max_index = sims.argmax()
         
         if max_similarity < self.similarity_threshold:
-            # Новая проверка для приветствий/прощаний и т.д.
-            greeting_phrases = [
-                "Ты кто?", "Ты бот?",
-                "Привет.", "Здравствуйте.",
-                "Как дела?",
-                "Спасибо.",
-                "Пока.", "До свидания."
-            ]
-
-            # Проверяем, содержит ли запрос хотя бы одно из ключевых слов
-            # Эмбеддинг запроса
-            query_emb = self.embeddings_model.encode(
-                query,
-                prompt_name="paraphrase",
-                convert_to_numpy=True,
-                normalize_embeddings=True
-            )
-
-            # Эмбеддинги фраз
-            phrases_emb = self.embeddings_model.encode(
-                greeting_phrases,
-                prompt_name="paraphrase",
-                convert_to_numpy=True,
-                normalize_embeddings=True
-            )
-
-            # Проверяем каждую фразу отдельно
-            for phrase, phrase_emb in zip(greeting_phrases, phrases_emb):
-                sim = cosine_similarity([query_emb], [phrase_emb])[0][0]
-                if sim >= 0.7:
-                    # Нашли подходящую фразу — прерываем
-                    return [Document(page_content=phrase)]
             return [Document(page_content="Не понял вопрос, уточните, пожалуйста!")]
         
         best_sentence = self.paragraphs[max_index]
-        
-        # Не обрезаем контекст здесь; обрезка только если после обрезки истории всё равно не влезает (в process_query)
         self._last_context_tokens = len(self.tokenizer.encode(best_sentence))
         return [Document(page_content=best_sentence)]
 
@@ -160,45 +162,28 @@ base_instruction = "Ты — помощник, который строго от�
 
 # --- RAG ---
 retriever = ParagraphRetriever(
-    paragraphs=paragraphs,
-    paragraph_embeddings=paragraph_embeddings,
-    embeddings_model=emb_model,
-    tokenizer=tokenizer
+    paragraphs=[],
+    paragraph_embeddings=[],
+    embeddings_model=emb_model
 )
 
 # --- Функция для рендеринга чата в текст (с контекстом) ---
 def render_chat_with_context(history: List[Dict[str, Any]], current_question: str, context: str, current_username: str) -> str:
     messages = [{"role": "Система", "content": base_instruction + ("\nКонтекст: " + context if context else "")}]
-    
-    for i, msg in enumerate(history):
-        if i % 2 == 0:
-            # Пользователь
-            username = msg.get("username", "Пользователь")
-            messages.append({"role": username, "content": msg["message"]})
-        else:
-            # AI
-            messages.append({"role": "AI-помощник", "content": msg["answer"]})
-    
+    for msg in history:
+        username = msg.get("username")
+        messages.append({"role": username, "content": msg["message"]})
     messages.append({"role": current_username, "content": current_question})
-    
     prompt_text = "\n".join([f"{msg['role']}: {msg['content']}" for msg in messages]) + "\nAI-помощник:"
-    
     return prompt_text
 
 # --- Функция для рендеринга только истории (для подсчёта токенов) ---
 def render_history_only(history: List[Dict[str, Any]]) -> str:
     history_messages = [{"role": "Система", "content": base_instruction}]
-    for i, msg in enumerate(history):
-        if i % 2 == 0:
-            # Пользователь
-            username = msg.get("username", "Пользователь")
-            history_messages.append({"role": username, "content": msg["message"]})
-        else:
-            # AI
-            history_messages.append({"role": "AI-помощник", "content": msg["answer"]})
-    
+    for msg in history:
+        username = msg.get("username")
+        history_messages.append({"role": username, "content": msg["message"]})
     history_str = "\n".join([f"{m['role']}: {m['content']}" for m in history_messages])
-    
     return history_str
 
 # --- Функция для обработки запросов ---
@@ -210,23 +195,71 @@ def process_query(query: str, message_history: List[Dict[str, Any]] = None, curr
         if not query.strip():
             return "Введите корректный запрос.", message_history
 
-        question_tokens = len(tokenizer.encode(query))
+        # Проверка на фразу "Передай запрос специалисту." и приветствия до выбора агента
+        query_emb = emb_model.encode(
+            query,
+            prompt_name="paraphrase",
+            convert_to_numpy=True,
+            normalize_embeddings=True
+        )
+        spech_phrase = "Передай запрос специалисту."
+        phrase_emb = emb_model.encode(
+            spech_phrase,
+            prompt_name="paraphrase",
+            convert_to_numpy=True,
+            normalize_embeddings=True
+        )
+        sim = cosine_similarity([query_emb], [phrase_emb])[0][0]
+        if sim >= 0.7:
+            answer = "Запрос передан специалисту. Пожалуйста, подождите."
+            message_history.append({"username": current_username, "message": query})
+            message_history.append({"answer": answer})
+            return answer, message_history
+
+        # Проверка на приветствия
+        greeting_phrases = [
+            "Ты кто?", "Ты бот?",
+            "Привет.", "Здравствуйте.",
+            "Как дела?",
+            "Спасибо.",
+            "Пока.", "До свидания."
+        ]
+        phrases_emb = emb_model.encode(
+            greeting_phrases,
+            prompt_name="paraphrase",
+            convert_to_numpy=True,
+            normalize_embeddings=True
+        )
+        for phrase, phrase_emb in zip(greeting_phrases, phrases_emb):
+            sim = cosine_similarity([query_emb], [phrase_emb])[0][0]
+            if sim >= 0.7:
+                answer = phrase
+                message_history.append({"username": current_username, "message": query})
+                message_history.append({"answer": answer})
+                return answer, message_history
+
+        # Выбор агента
+        selected_tokenizer, selected_model, file_path = retriever.select_agent(query)
+        if selected_tokenizer is None or selected_model is None:
+            return "Не понял вопрос, уточните, пожалуйста!", message_history
+
+        # Загрузка параграфов для выбранного агента
+        retriever.paragraphs, retriever.paragraph_embeddings = retriever.load_paragraphs(file_path)
+
+        # Устанавливаем токенизатор для retriever
+        retriever.tokenizer = selected_tokenizer
+        question_tokens = len(selected_tokenizer.encode(query))
         
         # Предварительный расчёт истории
         history_str = render_history_only(message_history)
-        history_tokens = len(tokenizer.encode(history_str))
+        history_tokens = len(selected_tokenizer.encode(history_str))
         
-        # Устанавливаем лимиты (без обрезки контекста)
+        # Устанавливаем лимиты
         retriever.set_dynamic_limits(question_tokens=question_tokens, history_tokens=history_tokens, max_total_tokens=8192)
 
         docs = retriever._get_relevant_documents(query)
         if docs[0].page_content == "Не понял вопрос, уточните, пожалуйста!":
             answer = "Не понял вопрос, уточните, пожалуйста!"
-            message_history.append({"username": current_username, "message": query})
-            message_history.append({"answer": answer})
-            return answer, message_history
-        elif docs[0].page_content == "Передай запрос специалисту.":
-            answer = "Запрос передан специалисту. Пожалуйста, подождите."
             message_history.append({"username": current_username, "message": query})
             message_history.append({"answer": answer})
             return answer, message_history
@@ -237,39 +270,36 @@ def process_query(query: str, message_history: List[Dict[str, Any]] = None, curr
 
         # Вычисляем требуемые токены
         max_total_tokens = 8192
-        reserved = retriever.reserved_output_tokens + 100  # Запас
+        reserved = retriever.reserved_output_tokens + 100
         available_input = max_total_tokens - reserved
         required = retriever.prompt_token_len + history_tokens + question_tokens + context_tokens
 
-        # Если переполнение — обрезаем историю (удаляем старые пары: user + ai)
+        # Обрезка истории
         while required > available_input and len(message_history) >= 2:
-            # Удаляем самое старое сообщение пользователя и ответ (пара)
             removed_user = message_history.pop(0)
             removed_ai = message_history.pop(0)
             logger.info(f"Обрезано старое сообщение из истории: {removed_user.get('message', '')[:50]}...")
-            
-            # Пересчитываем историю
             history_str = render_history_only(message_history)
-            history_tokens = len(tokenizer.encode(history_str))
+            history_tokens = len(selected_tokenizer.encode(history_str))
             required = retriever.prompt_token_len + history_tokens + question_tokens + context_tokens
 
-        # Если после обрезки истории всё равно не влезает (редкий случай, если контекст огромный) — обрезаем контекст как fallback
+        # Обрезка контекста как fallback
         if required > available_input and context:
             max_context_tokens = available_input - retriever.prompt_token_len - history_tokens - question_tokens
-            encoded_context = tokenizer.encode(context)
+            encoded_context = selected_tokenizer.encode(context)
             if len(encoded_context) > max_context_tokens:
                 truncated_tokens = encoded_context[:max_context_tokens]
-                context = tokenizer.decode(truncated_tokens, skip_special_tokens=True)
+                context = selected_tokenizer.decode(truncated_tokens, skip_special_tokens=True)
                 context_tokens = len(truncated_tokens)
-                logger.warning(f"Контекст обрезан как fallback до {context_tokens} токенов (история пуста или минимальна)")
-        
+                logger.warning(f"Контекст обрезан как fallback до {context_tokens} токенов")
+
         logger.info(f"Токены (после обрезки): история={history_tokens}, вопрос={question_tokens}, контекст={context_tokens}")
 
         # Pipeline для генерации
         hf_pipeline = pipeline(
             "text-generation",
-            model=model,
-            tokenizer=tokenizer,
+            model=selected_model,
+            tokenizer=selected_tokenizer,
             max_new_tokens=retriever.reserved_output_tokens,
             temperature=0.1,
             top_p=0.95,
@@ -285,7 +315,7 @@ def process_query(query: str, message_history: List[Dict[str, Any]] = None, curr
         sentences = list(sentenize(answer_text))
         first_sentence = sentences[0].text if sentences else answer_text
 
-        # Проверка сходства только если контекст не пустой
+        # Проверка сходства ответа с контекстом
         if context:
             answer_emb = emb_model.encode(first_sentence, prompt_name="paraphrase", convert_to_numpy=True, normalize_embeddings=True)
             context_emb = emb_model.encode(context, prompt_name="paraphrase", convert_to_numpy=True, normalize_embeddings=True)
@@ -304,10 +334,11 @@ def process_query(query: str, message_history: List[Dict[str, Any]] = None, curr
         return "Произошла ошибка при обработке запроса.", message_history
 
 # --- RabbitMQ интеграция ---
-RABBITMQ_HOST = os.getenv('RABBITMQ_HOST')  # Измените на ваш хост
-QUEUE_IN = os.getenv('QUEUE_IN')     # Очередь для входящих запросов
-QUEUE_OUT = os.getenv('QUEUE_OUT')  # Очередь для исходящих ответов
+RABBITMQ_HOST = os.getenv('RABBITMQ_HOST')
+QUEUE_IN = os.getenv('QUEUE_IN')
+QUEUE_OUT = os.getenv('QUEUE_OUT')
 BOT_USERNAME = "AI-помощник"
+IS_MANAGER = False
 
 def callback(ch, method, properties, body):
     try:
@@ -315,7 +346,6 @@ def callback(ch, method, properties, body):
         query = data.get('message', '')
         message_history = data.get('messageHistory', [])
         chat_id = data.get('chatId', None)
-        # Предполагаем, что текущий username приходит в data, или из последнего user сообщения
         current_username = "Пользователь"
         if 'username' in data:
             current_username = data['username']
@@ -325,20 +355,17 @@ def callback(ch, method, properties, body):
         logger.info(f"Получен запрос из RabbitMQ: {query}")
         
         answer, new_history = process_query(query, message_history, current_username, chat_id)
-        print(answer)
-        print(new_history)
-        print(current_username)
-        print(chat_id)
+
+        if answer == "Запрос передан специалисту. Пожалуйста, подождите.":
+            IS_MANAGER = True
         
         response = {
             'chatId': chat_id,
             'answer': answer,
-            'botUsername': BOT_USERNAME
+            'botUsername': BOT_USERNAME,
+            'isManager': IS_MANAGER
         }
 
-        print(response)
-        
-        # Отправка ответа
         ch.basic_publish(exchange='', routing_key=QUEUE_OUT, body=json.dumps(response))
         logger.info(f"Отправлен ответ в {QUEUE_OUT}: {answer}")
         
