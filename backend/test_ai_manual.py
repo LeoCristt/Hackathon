@@ -22,7 +22,7 @@ def connect_rabbitmq():
         exit(1)
 
 def send_ai_response(channel, chat_id, answer, bot_username, is_manager=False):
-    """Отправка ответа в очередь ai_responses"""
+    """Отправка ответа в очередь ai_response"""
     response = {
         'chatId': chat_id,
         'answer': answer,
@@ -32,14 +32,14 @@ def send_ai_response(channel, chat_id, answer, bot_username, is_manager=False):
 
     channel.basic_publish(
         exchange='',
-        routing_key='ai_responses',
+        routing_key='ai_response',
         body=json.dumps(response),
         properties=pika.BasicProperties(
             delivery_mode=2,  # Персистентное сообщение
         )
     )
 
-    print(f"\n✅ Ответ отправлен в очередь 'ai_responses':")
+    print(f"\n✅ Ответ отправлен в очередь 'ai_response':")
     print(f"   Chat ID: {chat_id}")
     print(f"   Answer: {answer}")
     print(f"   Bot Username: {bot_username}")
@@ -109,8 +109,8 @@ if __name__ == '__main__':
 
     # Проверяем/создаем очереди
     channel.queue_declare(queue='ai_requests', durable=True)
-    channel.queue_declare(queue='ai_responses', durable=True)
-    print("✅ Очереди 'ai_requests' и 'ai_responses' готовы\n")
+    channel.queue_declare(queue='ai_response', durable=True)
+    print("✅ Очереди 'ai_requests' и 'ai_response' готовы\n")
 
     print("Выберите режим:")
     print("1. Слушать ai_requests (показывать входящие запросы)")

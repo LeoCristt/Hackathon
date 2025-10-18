@@ -48,7 +48,7 @@ func (s *ChatService) SaveMessage(chatID string, username, messageText string, I
 			Username:        username,
 			Message:         messageText,
 			MessageSequence: lastSeq + 1,
-			IsManager:       true,
+			IsManager:       IsManager,
 			CreatedAt:       createdAt,
 		}
 
