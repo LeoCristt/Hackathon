@@ -4,6 +4,8 @@ WORKDIR /app
 
 COPY . .
 
+RUN pip3 install prometheus_client python-json-logger
+
 # Создаем entrypoint скрипт
 RUN echo '#!/bin/bash\n\
 echo "Проверка моделей..."\n\
