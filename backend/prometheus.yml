@@ -7,3 +7,9 @@ scrape_configs:
   - job_name: 'kong'
     static_configs:
       - targets: ['kong:8001']  # Порт для метрик Kong
+
+  # Scrape для AI Service
+  - job_name: 'ai-service'
+    static_configs:
+      - targets: ['ai-service:1234']  # Порт для метрик AI сервиса
+    scrape_interval: 10s  # Более частый сбор для AI сервиса

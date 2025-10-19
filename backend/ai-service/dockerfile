@@ -4,4 +4,13 @@ WORKDIR /app
 
 COPY . .
 
-CMD python3 model.py
+RUN pip3 install prometheus_client python-json-logger
+
+# Создаем entrypoint скрипт
+RUN echo '#!/bin/bash\n\
+echo "Проверка моделей..."\n\
+python3 download_models.py\n\
+echo "Запуск AI сервиса..."\n\
+python3 model.py' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
+
+CMD ["/app/entrypoint.sh"]

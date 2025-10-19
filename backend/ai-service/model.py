@@ -18,9 +18,25 @@ import chromadb
 from chromadb import HttpClient
 from chromadb.config import Settings
 import uuid
+import time
+from pythonjsonlogger import jsonlogger
+from metrics import (
+    ai_requests_total, ai_request_duration_seconds, ai_tokens_used,
+    ai_agent_selection_similarity, ai_context_similarity, ai_special_cases_total,
+    ai_active_chats, ai_history_truncation_total, start_metrics_server
+)
 
-logging.basicConfig(level=logging.INFO)
+# Настройка структурированного JSON логирования
+logHandler = logging.StreamHandler()
+formatter = jsonlogger.JsonFormatter(
+    '%(asctime)s %(name)s %(levelname)s %(message)s',
+    rename_fields={"asctime": "timestamp", "levelname": "level", "name": "logger"},
+    json_ensure_ascii=False
+)
+logHandler.setFormatter(formatter)
 logger = logging.getLogger(__name__)
+logger.addHandler(logHandler)
+logger.setLevel(logging.INFO)
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 logger.info(f"Используемое устройство: {device}")
@@ -242,6 +258,10 @@ class ParagraphRetriever(BaseRetriever):
         if max_sim < self.similarity_threshold:
             return None, None, None
         selected_agent = agent_names[max_idx]
+
+        # Записываем метрику схожести с агентом
+        ai_agent_selection_similarity.labels(agent=selected_agent).observe(float(max_sim))
+
         logger.info(f"Выбран агент: {selected_agent} (similarity: {max_sim:.2f})")
         return agent_map[selected_agent]["tokenizer"], agent_map[selected_agent]["model"], agent_map[selected_agent]["file_path"]
 
@@ -369,11 +389,25 @@ def render_history_only(history: List[Dict[str, Any]]) -> str:
 
 # --- Функция для обработки запросов ---
 def process_query(query: str, message_history: List[Dict[str, Any]] = None, current_username: str = "Пользователь", chat_id: str = None) -> Tuple[str, List[Dict[str, Any]]]:
+    start_time = time.time()
+    selected_agent = "none"
+    status = "error"
+
     if message_history is None:
         message_history = []
-    
+
     try:
+        logger.info("Processing query", extra={
+            "chat_id": chat_id,
+            "username": current_username,
+            "query_length": len(query),
+            "history_length": len(message_history)
+        })
+
         if not query.strip():
+            status = "empty_query"
+            ai_requests_total.labels(agent="none", status=status).inc()
+            logger.warning("Empty query received", extra={"chat_id": chat_id})
             return "Введите корректный запрос.", message_history
 
         # Проверка на фразу "Передай запрос специалисту."
@@ -392,7 +426,24 @@ def process_query(query: str, message_history: List[Dict[str, Any]] = None, curr
         )
         sim = cosine_similarity([query_emb], [phrase_emb])[0][0]
         if sim >= 0.7:
+            status = "escalated"
+            selected_agent = "specialist"
+            ai_requests_total.labels(agent=selected_agent, status=status).inc()
+            ai_special_cases_total.labels(case_type="escalation").inc()
+
             answer = "Запрос передан специалисту. Пожалуйста, подождите."
+            duration = time.time() - start_time
+
+            logger.info("Запрос передан специалисту", extra={
+                "chat_id": chat_id,
+                "username": current_username,
+                "similarity": float(sim),
+                "duration": duration,
+                "status": status
+            })
+
+            ai_request_duration_seconds.labels(agent=selected_agent).observe(duration)
+
             message_history.append({"username": current_username, "message": query})
             message_history.append({"answer": answer})
             return answer, message_history
@@ -414,7 +465,24 @@ def process_query(query: str, message_history: List[Dict[str, Any]] = None, curr
         
         logger.info(f"Ненормативная лексика - max_sim: {max_profanity_sim:.3f}, фраза: '{profanity_phrases[max_profanity_idx]}'")
         if max_profanity_sim >= 0.7:
+            status = "profanity"
+            selected_agent = "moderation"
+            ai_requests_total.labels(agent=selected_agent, status=status).inc()
+            ai_special_cases_total.labels(case_type="profanity").inc()
+
             answer = "Ведите себя культурно!"
+            duration = time.time() - start_time
+
+            logger.warning("Обнаружена ненормативная лексика", extra={
+                "chat_id": chat_id,
+                "username": current_username,
+                "similarity": float(max_profanity_sim),
+                "matched_phrase": profanity_phrases[max_profanity_idx],
+                "duration": duration
+            })
+
+            ai_request_duration_seconds.labels(agent=selected_agent).observe(duration)
+
             message_history.append({"username": current_username, "message": query})
             message_history.append({"answer": answer})
             return answer, message_history
@@ -438,10 +506,14 @@ def process_query(query: str, message_history: List[Dict[str, Any]] = None, curr
         max_similarity = similarities[max_sim_idx]
         
         logger.info(f"Приветствие - max_sim: {max_similarity:.3f}, фраза: '{greeting_phrases[max_sim_idx]}'")
-        
+
         if max_similarity >= 0.7:
+            status = "greeting"
+            selected_agent = "base_model"
+            ai_special_cases_total.labels(case_type="greeting").inc()
+
             full_prompt = render_chat_with_context(message_history, query, "", current_username)
-            
+
             hf_pipeline = pipeline(
                 "text-generation",
                 model=model,
@@ -452,13 +524,26 @@ def process_query(query: str, message_history: List[Dict[str, Any]] = None, curr
                 repetition_penalty=1.1,
                 return_full_text=False
             )
-            
+
             generated = hf_pipeline(full_prompt)
             answer_text = generated[0]['generated_text'].strip()
-            
+
             sentences = list(sentenize(answer_text))
             first_sentence = sentences[0].text if sentences else answer_text
-            
+
+            duration = time.time() - start_time
+            ai_requests_total.labels(agent=selected_agent, status=status).inc()
+            ai_request_duration_seconds.labels(agent=selected_agent).observe(duration)
+
+            logger.info("Обработано приветствие", extra={
+                "chat_id": chat_id,
+                "username": current_username,
+                "matched_phrase": greeting_phrases[max_sim_idx],
+                "similarity": float(max_similarity),
+                "duration": duration,
+                "answer_length": len(first_sentence)
+            })
+
             message_history.append({"username": current_username, "message": query})
             message_history.append({"answer": first_sentence})
             return first_sentence, message_history
@@ -466,10 +551,30 @@ def process_query(query: str, message_history: List[Dict[str, Any]] = None, curr
         # Выбор агента
         selected_tokenizer, selected_model, file_path = retriever.select_agent(query)
         if selected_tokenizer is None or selected_model is None:
+            status = "no_agent"
+            ai_requests_total.labels(agent="none", status=status).inc()
+            ai_special_cases_total.labels(case_type="no_context").inc()
+
+            duration = time.time() - start_time
+            ai_request_duration_seconds.labels(agent="none").observe(duration)
+
+            logger.warning("Не удалось выбрать агента", extra={
+                "chat_id": chat_id,
+                "username": current_username,
+                "query": query[:100],
+                "duration": duration
+            })
+
             return "Не понял вопрос, уточните, пожалуйста!", message_history
 
         # Устанавливаем текущего агента
         retriever.current_agent = os.path.basename(file_path).split(".")[0]
+        selected_agent = retriever.current_agent
+
+        logger.info("Выбран агент", extra={
+            "chat_id": chat_id,
+            "agent": selected_agent
+        })
         retriever.paragraphs[retriever.current_agent], retriever.paragraph_embeddings[retriever.current_agent] = retriever.load_paragraphs(file_path)
 
         # Устанавливаем токенизатор для retriever
@@ -485,13 +590,32 @@ def process_query(query: str, message_history: List[Dict[str, Any]] = None, curr
 
         docs = retriever._get_relevant_documents(query)
         if docs[0].page_content == "Не понял вопрос, уточните, пожалуйста!":
+            status = "no_context"
+            ai_requests_total.labels(agent=selected_agent, status=status).inc()
+            ai_special_cases_total.labels(case_type="no_context").inc()
+
+            duration = time.time() - start_time
+            ai_request_duration_seconds.labels(agent=selected_agent).observe(duration)
+
+            logger.warning("Контекст не найден", extra={
+                "chat_id": chat_id,
+                "agent": selected_agent,
+                "duration": duration
+            })
+
             answer = "Не понял вопрос, уточните, пожалуйста!"
             message_history.append({"username": current_username, "message": query})
             message_history.append({"answer": answer})
             return answer, message_history
-        
+
         context = docs[0].page_content
         context_tokens = retriever.last_context_tokens if context else 0
+
+        # Логируем использование токенов
+        ai_tokens_used.labels(token_type="question").observe(question_tokens)
+        ai_tokens_used.labels(token_type="history").observe(history_tokens)
+        ai_tokens_used.labels(token_type="context").observe(context_tokens)
+
         logger.info(f"Токены (до обрезки): история={history_tokens}, вопрос={question_tokens}, контекст={context_tokens}")
 
         # Вычисляем требуемые токены
@@ -501,13 +625,24 @@ def process_query(query: str, message_history: List[Dict[str, Any]] = None, curr
         required = retriever.prompt_token_len + history_tokens + question_tokens + context_tokens
 
         # Обрезка истории
+        history_truncated = False
         while required > available_input and len(message_history) >= 2:
             removed_user = message_history.pop(0)
             removed_ai = message_history.pop(0)
+            history_truncated = True
+            ai_history_truncation_total.inc()
+
             logger.info(f"Обрезано старое сообщение из истории: {removed_user.get('message', '')[:50]}...")
             history_str = render_history_only(message_history)
             history_tokens = len(selected_tokenizer.encode(history_str))
             required = retriever.prompt_token_len + history_tokens + question_tokens + context_tokens
+
+        if history_truncated:
+            logger.info("История обрезана", extra={
+                "chat_id": chat_id,
+                "new_history_length": len(message_history),
+                "new_history_tokens": history_tokens
+            })
 
         # Обрезка контекста как fallback
         if required > available_input and context:
@@ -546,9 +681,43 @@ def process_query(query: str, message_history: List[Dict[str, Any]] = None, curr
             answer_emb = emb_model.encode(first_sentence, prompt_name="paraphrase", convert_to_numpy=True, normalize_embeddings=True)
             context_emb = emb_model.encode(context, prompt_name="paraphrase", convert_to_numpy=True, normalize_embeddings=True)
             similarity = cosine_similarity([answer_emb], [context_emb])[0][0]
-            
+
+            ai_context_similarity.observe(float(similarity))
+
             if similarity < 0.5:
+                status = "escalated"
+                ai_requests_total.labels(agent=selected_agent, status=status).inc()
+                ai_special_cases_total.labels(case_type="low_similarity").inc()
+
                 first_sentence = "Запрос передан специалисту. Пожалуйста, подождите."
+
+                duration = time.time() - start_time
+                ai_request_duration_seconds.labels(agent=selected_agent).observe(duration)
+
+                logger.warning("Низкая схожесть ответа с контекстом", extra={
+                    "chat_id": chat_id,
+                    "agent": selected_agent,
+                    "similarity": float(similarity),
+                    "duration": duration
+                })
+            else:
+                status = "success"
+                ai_requests_total.labels(agent=selected_agent, status=status).inc()
+
+                duration = time.time() - start_time
+                total_tokens = retriever.prompt_token_len + history_tokens + question_tokens + context_tokens
+                ai_tokens_used.labels(token_type="total").observe(total_tokens)
+                ai_request_duration_seconds.labels(agent=selected_agent).observe(duration)
+
+                logger.info("Запрос успешно обработан", extra={
+                    "chat_id": chat_id,
+                    "agent": selected_agent,
+                    "username": current_username,
+                    "context_similarity": float(similarity),
+                    "duration": duration,
+                    "total_tokens": total_tokens,
+                    "answer_length": len(first_sentence)
+                })
 
         message_history.append({"username": current_username, "message": query})
         message_history.append({"answer": first_sentence})
@@ -556,7 +725,17 @@ def process_query(query: str, message_history: List[Dict[str, Any]] = None, curr
         return first_sentence, message_history
 
     except Exception as e:
-        logger.error(f"Ошибка: {e}")
+        duration = time.time() - start_time
+        ai_requests_total.labels(agent=selected_agent, status="error").inc()
+        ai_request_duration_seconds.labels(agent=selected_agent).observe(duration)
+
+        logger.error("Ошибка при обработке запроса", extra={
+            "chat_id": chat_id,
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "duration": duration
+        }, exc_info=True)
+
         return "Произошла ошибка при обработке запроса.", message_history
 
 # --- RabbitMQ интеграция ---
@@ -601,14 +780,19 @@ def callback(ch, method, properties, body):
         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
 
 if __name__ == "__main__":
+    # Запускаем сервер метрик Prometheus на порту 1234
+    metrics_port = int(os.getenv('METRICS_PORT', 1234))
+    start_metrics_server(port=metrics_port)
+    logger.info(f"Сервер метрик Prometheus запущен на порту {metrics_port}")
+
     connection = pika.BlockingConnection(pika.ConnectionParameters(host=RABBITMQ_HOST))
     channel = connection.channel()
-    
+
     channel.queue_declare(queue=QUEUE_IN, durable=True)
     channel.queue_declare(queue=QUEUE_OUT, durable=True)
-    
+
     channel.basic_qos(prefetch_count=1)
     channel.basic_consume(queue=QUEUE_IN, on_message_callback=callback)
-    
+
     logger.info("Ожидание сообщений из RabbitMQ. Для выхода нажмите CTRL+C")
     channel.start_consuming()
