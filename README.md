@@ -121,12 +121,6 @@ curl -X POST http://localhost:8000/api/auth/login \
   -d '{"email": "user@example.com", "password": "password123"}'
 ```
 
-### 4. Получение статистики
-```bash
-curl -X GET http://localhost:8000/api/admin/stats \
-  -H "Authorization: Bearer <token>"
-```
-
 ## 🔍 Мониторинг и метрики
 
 ### Grafana Dashboards
