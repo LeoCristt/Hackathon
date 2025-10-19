@@ -23,7 +23,7 @@ export function useChatList() {
             const token = localStorage.getItem('access_token');
 
             // Запрос через Kong Gateway с токеном
-            const response = await fetch('http://localhost:8000/api/chats/info', {
+            const response = await fetch('http://172.29.67.31:8000/api/chats/info', {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',

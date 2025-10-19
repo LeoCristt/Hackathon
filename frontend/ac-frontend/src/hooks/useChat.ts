@@ -35,7 +35,7 @@ export function useChat(chatId: string | null) {
         const token = localStorage.getItem('access_token');
 
         // Создаем новое подключение
-        const newSocket = io('http://localhost:8000', {
+        const newSocket = io('http://172.29.67.31:8000', {
             path: '/socket.io',
             transports: ['polling', 'websocket'],
             reconnection: true,
