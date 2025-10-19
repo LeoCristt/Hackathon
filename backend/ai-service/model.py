@@ -30,7 +30,8 @@ from metrics import (
 logHandler = logging.StreamHandler()
 formatter = jsonlogger.JsonFormatter(
     '%(asctime)s %(name)s %(levelname)s %(message)s',
-    rename_fields={"asctime": "timestamp", "levelname": "level", "name": "logger"}
+    rename_fields={"asctime": "timestamp", "levelname": "level", "name": "logger"},
+    json_ensure_ascii=False
 )
 logHandler.setFormatter(formatter)
 logger = logging.getLogger(__name__)
