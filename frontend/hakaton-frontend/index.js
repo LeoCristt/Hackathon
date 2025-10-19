@@ -27,5 +27,5 @@ app.get('/css', (req, res) => {
 });
 
 app.listen(port, () => {
-    console.log(`Server running at http://172.29.67.31:${port}`);
+    console.log(`Server running at http://localhost:${port}`);
 });

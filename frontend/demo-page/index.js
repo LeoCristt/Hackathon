@@ -12,7 +12,7 @@ app.get('/manager', (req, res) => {
 });
 
 app.listen(port, () => {
-    console.log(`Server running at http://172.29.67.31:${port}`);
-    console.log(`Demo page: http://172.29.67.31t:${port}`);
-    console.log(`Manager panel: http://172.29.67.31:${port}/manager`);
+    console.log(`Server running at http://localhost:${port}`);
+    console.log(`Demo page: http://localhost:${port}`);
+    console.log(`Manager panel: http://localhost:${port}/manager`);
 });

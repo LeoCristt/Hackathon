@@ -1,5 +1,5 @@
 (function() {
-    let url = "http://172.29.67.31"
+    let url = "http://localhost"
     let socket = null;
     let chatId = null;
 
