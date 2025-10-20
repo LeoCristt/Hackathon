@@ -106,10 +106,10 @@ services:
     depends_on:
       kong:
         condition: service_started
-      frontend-widget:
-        condition: service_started
-      chat-service:
-        condition: service_started
+      # frontend-widget:
+      #   condition: service_started
+      # chat-service:
+      #   condition: service_started
     networks:
       - kong-net
     restart: "no"
