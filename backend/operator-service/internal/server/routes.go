@@ -45,7 +45,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 	go func() {
 		log.Printf("listening RabbitMQ queue: %s", s.rabbitCfg.Queue)
-		chatHandler.ConsumeRabbitMQ(s.rabbitCfg.URL, s.rabbitCfg.Queue)
+		chatHandler.ConsumeChatQueue(s.rabbitCfg.URL, s.rabbitCfg.Queue)
 	}()
 
 	return r
